@@ -1,0 +1,16 @@
+#commands to use on members
+kick
+
+#logging
+log message posts, deletes, and edits
+output user information on join
+
+#automation
+auto-mod
+    finish logging before auto-mod
+
+#security
+anonymous tickets/messages for abuse victims
+
+#casual/game commands
+dice roll

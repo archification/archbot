@@ -1,0 +1,17 @@
+[package]
+name = "archbot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = "0.4.40"
+poise = "0.6.1"
+serde = { version = "1.0.219", features = ["derive"] }
+tokio = { version = "1.44.1", features = ["full"] }
+toml = "0.8.20"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
