@@ -13,6 +13,64 @@ use std::io::Write;
 
 const CONFIG_PATH: &str = "/home/jaster/wut/rs/archbot/config.toml";
 
+fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
+    let toml_content = fs::read_to_string(CONFIG_PATH)
+        .expect("Failed to read config file");
+    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    if let Some(guild_table) = value.get(guild_id.to_string()).and_then(|v| v.as_table()) {
+        if let Some(roles) = guild_table.get("ticket_roles").and_then(|v| v.as_array()) {
+            return roles.iter()
+                .filter_map(|v| v.as_integer().map(|x| x as u64))
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn add_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Error> {
+    let toml_content = fs::read_to_string(CONFIG_PATH)?;
+    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    let guild_table = value
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    let roles = guild_table
+        .entry("ticket_roles")
+        .or_insert(Value::Array(Vec::new()))
+        .as_array_mut()
+        .expect("ticket_roles should be an array");
+    if !roles.iter().any(|v| v.as_integer() == Some(role_id as i64)) {
+        roles.push(Value::Integer(role_id as i64));
+    }
+    let new_toml = toml::to_string_pretty(&value)?;
+    fs::write(CONFIG_PATH, new_toml)?;
+    Ok(())
+}
+
+fn remove_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Error> {
+    let toml_content = fs::read_to_string(CONFIG_PATH)?;
+    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    if let Some(guild_table) = value
+        .as_table_mut()
+        .expect("Root should be a table")
+        .get_mut(&guild_id.to_string())
+        .and_then(|v| v.as_table_mut())
+    {
+        if let Some(roles) = guild_table
+            .get_mut("ticket_roles")
+            .and_then(|v| v.as_array_mut())
+        {
+            roles.retain(|v| v.as_integer() != Some(role_id as i64));
+        }
+    }
+    let new_toml = toml::to_string_pretty(&value)?;
+    fs::write(CONFIG_PATH, new_toml)?;
+    Ok(())
+}
+
 fn get_logging_channel(guild_id: u64) -> Option<ChannelId> {
     let toml_content = fs::read_to_string(CONFIG_PATH)
         .expect("Failed to read config file");
@@ -54,6 +112,66 @@ pub async fn help(
     Ok(())
 }
 
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Moderation",
+    guild_only
+)]
+pub async fn addticketrole(
+    ctx: Context<'_>,
+    #[description = "Role to add to ticket access"] role: serenity::Role,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    add_ticket_role(guild_id.into(), role.id.into())?;
+    ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Moderation",
+    guild_only
+)]
+pub async fn removeticketrole(
+    ctx: Context<'_>,
+    #[description = "Role to remove from ticket access"] role: serenity::Role,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    remove_ticket_role(guild_id.into(), role.id.into())?;
+    ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Moderation",
+    guild_only
+)]
+pub async fn listticketroles(
+    ctx: Context<'_>,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let roles = get_ticket_roles(guild_id.into());
+    if roles.is_empty() {
+        ctx.say("No ticket access roles configured").await?;
+        return Ok(());
+    }
+    let mut response = "Ticket access roles:\n".to_string();
+    for role_id in roles {
+        if let Some(role) = ctx.guild().unwrap().roles.get(&serenity::RoleId::new(role_id)) {
+            response.push_str(&format!("- {}\n", role.name));
+        }
+    }
+    ctx.say(response).await?;
+    Ok(())
+}
+
 #[poise::command(slash_command, prefix_command, guild_only)]
 pub async fn ticket(
     ctx: Context<'_>,
@@ -77,22 +195,30 @@ pub async fn ticket(
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M");
     let channel_name = format!("ticket-{}-{}", author.name, timestamp);
     let issue_description = issue.unwrap_or_else(|| "No description provided".to_string());
+    let mut permissions = vec![
+        PermissionOverwrite {
+            allow: Permissions::VIEW_CHANNEL,
+            deny: Permissions::empty(),
+            kind: PermissionOverwriteType::Member(author.id),
+        },
+        PermissionOverwrite {
+            allow: Permissions::empty(),
+            deny: Permissions::VIEW_CHANNEL,
+            kind: PermissionOverwriteType::Role(GuildId::everyone_role(&guild_id)),
+        }
+    ];
+    for role_id in get_ticket_roles(guild_id.into()) {
+        permissions.push(PermissionOverwrite {
+            allow: Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::MANAGE_MESSAGES,
+            deny: Permissions::empty(),
+            kind: PermissionOverwriteType::Role(serenity::RoleId::new(role_id)),
+        });
+    }
     let channel_builder = CreateChannel::new(channel_name)
         .kind(serenity::ChannelType::Text)
         .category(category_id)
         .topic(issue_description.clone())
-        .permissions(vec![
-            PermissionOverwrite {
-                allow: Permissions::VIEW_CHANNEL,
-                deny: Permissions::empty(),
-                kind: PermissionOverwriteType::Member(author.id),
-            },
-            PermissionOverwrite {
-                allow: Permissions::empty(),
-                deny: Permissions::VIEW_CHANNEL,
-                kind: PermissionOverwriteType::Role(GuildId::everyone_role(&guild_id)),
-            }
-        ]);
+        .permissions(permissions);
     let http = ctx.http();
     let channel = match guild_id.create_channel(&http, channel_builder).await {
         Ok(c) => c,

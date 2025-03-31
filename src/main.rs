@@ -45,6 +45,9 @@ async fn main() {
             commands::setticket(),
             commands::ticket(),
             commands::closeticket(),
+            commands::addticketrole(),
+            commands::removeticketrole(),
+            commands::listticketroles(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),
