@@ -2,6 +2,9 @@
 
 mod commands;
 mod utils;
+mod config;
+mod tickets;
+mod staff;
 
 use poise::serenity_prelude as serenity;
 use std::{
@@ -36,19 +39,19 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
 async fn main() {
     let options = poise::FrameworkOptions {
         commands: vec![
+            staff::quit(),
+            staff::ban(),
             commands::help(),
-            commands::quit(),
             commands::announce(),
-            commands::ban(),
             commands::vote(),
             commands::getvotes(),
-            commands::setlog(),
-            commands::setticket(),
-            commands::ticket(),
-            commands::closeticket(),
-            commands::addticketrole(),
-            commands::removeticketrole(),
-            commands::listticketroles(),
+            config::setlog(),
+            config::setticket(),
+            config::addticketrole(),
+            config::removeticketrole(),
+            config::listticketroles(),
+            tickets::ticket(),
+            tickets::closeticket(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),
