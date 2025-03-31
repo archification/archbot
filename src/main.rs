@@ -1,6 +1,7 @@
 #![warn(clippy::str_to_string)]
 
 mod commands;
+mod utils;
 
 use poise::serenity_prelude as serenity;
 use std::{
