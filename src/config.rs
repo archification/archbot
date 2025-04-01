@@ -10,7 +10,7 @@ use crate::utils::*;
     prefix_command,
     slash_command,
     required_permissions = "ADMINISTRATOR",
-    category = "Moderation",
+    category = "Config",
     guild_only
 )]
 pub async fn addticketrole(
@@ -27,7 +27,7 @@ pub async fn addticketrole(
     prefix_command,
     slash_command,
     required_permissions = "ADMINISTRATOR",
-    category = "Moderation",
+    category = "Config",
     guild_only
 )]
 pub async fn removeticketrole(
@@ -44,7 +44,7 @@ pub async fn removeticketrole(
     prefix_command,
     slash_command,
     required_permissions = "ADMINISTRATOR",
-    category = "Moderation",
+    category = "Config",
     guild_only
 )]
 pub async fn listticketroles(
@@ -70,7 +70,7 @@ pub async fn listticketroles(
     prefix_command,
     slash_command,
     required_permissions = "ADMINISTRATOR",
-    category = "Moderation",
+    category = "Config",
     guild_only
 )]
 pub async fn setlog(
@@ -100,7 +100,7 @@ pub async fn setlog(
     prefix_command,
     slash_command,
     required_permissions = "ADMINISTRATOR",
-    category = "Moderation",
+    category = "Config",
     guild_only
 )]
 pub async fn setticket(
