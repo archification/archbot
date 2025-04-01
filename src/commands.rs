@@ -17,7 +17,7 @@ pub async fn help(
         ctx,
         command.as_deref(),
         poise::builtins::HelpConfiguration {
-            extra_text_at_bottom: "This is an example bot made to showcase features of my custom Discord bot framework",
+            extra_text_at_bottom: "\nThe above commands are available within their respective scopes.",
             ..Default::default()
         },
     )

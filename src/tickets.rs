@@ -54,7 +54,7 @@ pub async fn ticket(
             kind: PermissionOverwriteType::Role(serenity::RoleId::new(role_id)),
         });
     }
-    let channel_builder = CreateChannel::new(channel_name)
+    let channel_builder = CreateChannel::new(&channel_name)
         .kind(serenity::ChannelType::Text)
         .category(category_id)
         .topic(issue_description.clone())
@@ -73,11 +73,20 @@ pub async fn ticket(
     }
     let embed = CreateEmbed::new()
         .title("New Ticket")
-        .description(issue_description)
+        .description(&issue_description)
         .color(serenity::Colour::DARK_GREEN);
     if let Err(e) = channel.send_message(&http, CreateMessage::new().embed(embed)).await {
         ctx.say(format!("Failed to send ticket embed: {}", e)).await?;
         return Ok(());
+    }
+    if let Some(log_channel) = get_logging_channel(guild_id.into()) {
+        let log_message = format!(
+            "Ticket `{}` was opened by {}.\nDescription: {}",
+            channel_name,
+            ctx.author().mention(),
+            issue_description
+        );
+        log_channel.say(&ctx.http(), log_message).await?;
     }
     ctx.say(format!("Created your ticket: {}", channel.mention())).await?;
     Ok(())
@@ -118,7 +127,7 @@ pub async fn closeticket(
     channel.delete(&ctx.http()).await?;
     if let Some(log_channel) = get_logging_channel(guild_id.into()) {
         let log_message = format!(
-            "Ticket `{}` was closed by {}. Reason: {}",
+            "Ticket `{}` was closed by {}.\nReason: {}",
             channel_name,
             ctx.author().mention(),
             reason

@@ -75,6 +75,7 @@ async fn main() {
                 println!("Executed command {}!", ctx.command().qualified_name);
             })
         },
+/*
         command_check: Some(|ctx| {
             Box::pin(async move {
                 if ctx.author().id == 204537370224099328 {
@@ -83,6 +84,7 @@ async fn main() {
                 Ok(false)
             })
         }),
+*/
         skip_checks_for_owners: false,
         event_handler: |_ctx, event, _framework, _data| {
             Box::pin(async move {
