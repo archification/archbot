@@ -37,7 +37,7 @@ pub async fn ticket(
     let issue_description = issue.unwrap_or_else(|| "No description provided".to_string());
     let mut permissions = vec![
         PermissionOverwrite {
-            allow: Permissions::VIEW_CHANNEL,
+            allow: Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::EMBED_LINKS | Permissions::ATTACH_FILES | Permissions::READ_MESSAGE_HISTORY,
             deny: Permissions::empty(),
             kind: PermissionOverwriteType::Member(author.id),
         },
@@ -70,6 +70,23 @@ pub async fn ticket(
     if let Err(e) = channel.say(&http, format!("{} created this ticket", author.mention())).await {
         ctx.say(format!("Failed to send ticket message: {}", e)).await?;
         return Ok(());
+    }
+    let show_message = if let Some(exempt_role_id) = get_ticket_exempt_role(guild_id.into()) {
+        let member = guild_id.member(&ctx.http(), ctx.author().id).await?;
+        !member.roles.contains(&serenity::RoleId::new(exempt_role_id))
+    } else {
+        true
+    };
+    if show_message {
+        let template_path = get_ticket_template_path(guild_id.into());
+        let message = if let Ok(content) = std::fs::read_to_string(&template_path) {
+            content
+        } else {
+            "Thank you for creating a ticket! Support staff will be with you shortly.".to_string()
+        };
+        if let Err(e) = channel.say(&http, message).await {
+            ctx.say(format!("Failed to send ticket message: {}", e)).await?;
+        }
     }
     let embed = CreateEmbed::new()
         .title("New Ticket")

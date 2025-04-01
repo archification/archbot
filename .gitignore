@@ -5,3 +5,4 @@ config.toml
 run.sh
 logs
 Cargo.lock
+ticket_templates

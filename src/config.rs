@@ -130,3 +130,74 @@ pub async fn setticket(
     ctx.say(format!("Updated ticket category to {}", channel.name)).await?;
     Ok(())
 }
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Config",
+    guild_only
+)]
+pub async fn setticketmessage(
+    ctx: Context<'_>,
+    #[description = "Text file containing the ticket message template"]
+    file: serenity::Attachment,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    if !file.filename.ends_with(".txt") {
+        ctx.say("Please upload a .txt file").await?;
+        return Ok(());
+    }
+    let content = file.download().await?;
+    let content = String::from_utf8(content)?;
+    std::fs::create_dir_all("./ticket_templates")?;
+    let path = get_ticket_template_path(guild_id.into());
+    std::fs::write(path, content)?;
+    ctx.say("Ticket message template updated!").await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Config",
+    guild_only
+)]
+pub async fn setticketexemptrole(
+    ctx: Context<'_>,
+    #[description = "Role that exempts users from seeing the ticket message"]
+    role: serenity::Role,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    set_ticket_exempt_role(guild_id.into(), role.id.into())?;
+    ctx.say(format!("Set {} as the ticket exempt role", role.name)).await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Config",
+    guild_only
+)]
+pub async fn removeticketexemptrole(
+    ctx: Context<'_>,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let toml_content = fs::read_to_string(CONFIG_PATH)?;
+    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    if let Some(guild_table) = value
+        .as_table_mut()
+        .expect("Root should be a table")
+        .get_mut(&guild_id.to_string())
+        .and_then(|v| v.as_table_mut())
+    {
+        guild_table.remove("ticket_exempt_role");
+    }
+    let new_toml = toml::to_string_pretty(&value)?;
+    fs::write(CONFIG_PATH, new_toml)?;
+    ctx.say("Removed ticket exempt role").await?;
+    Ok(())
+}

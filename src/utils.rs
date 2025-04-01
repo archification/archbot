@@ -102,3 +102,34 @@ pub fn get_logging_channels() -> HashMap<String, i64> {
         })
         .unwrap_or_default()
 }
+
+pub fn get_ticket_template_path(guild_id: u64) -> String {
+    format!("./ticket_templates/{}.txt", guild_id)
+}
+
+pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
+    let toml_content = fs::read_to_string(CONFIG_PATH)
+        .expect("Failed to read config file");
+    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    value.get(guild_id.to_string())
+        .and_then(|v| v.as_table())
+        .and_then(|guild_table| guild_table.get("ticket_exempt_role"))
+        .and_then(|v| v.as_integer())
+        .map(|role_id| role_id as u64)
+}
+
+pub fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let toml_content = fs::read_to_string(CONFIG_PATH)?;
+    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
+    let guild_table = value
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert("ticket_exempt_role".to_owned().to_string(), Value::Integer(role_id as i64));
+    let new_toml = toml::to_string_pretty(&value)?;
+    fs::write(CONFIG_PATH, new_toml)?;
+    Ok(())
+}
