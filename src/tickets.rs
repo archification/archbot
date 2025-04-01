@@ -120,6 +120,7 @@ pub async fn closeticket(
     ctx: Context<'_>,
     #[description = "Reason for closing"] reason: Option<String>,
 ) -> Result<(), Error> {
+    ctx.defer().await?;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let channel = ctx.channel_id();
     let channel_info = channel.to_channel(&ctx.http()).await?;
