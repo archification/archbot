@@ -13,7 +13,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-//use chrono::TimeZone;
 use crate::utils::get_logging_channel;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -77,6 +76,7 @@ async fn main() {
     let options = poise::FrameworkOptions {
         commands: vec![
             staff::quit(),
+            staff::writeconfig(),
             staff::ban(),
             commands::help(),
             commands::announce(),

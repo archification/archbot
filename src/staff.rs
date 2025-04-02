@@ -9,9 +9,28 @@ use crate::utils::*;
     hide_in_help
 )]
 pub async fn quit(ctx: Context<'_>) -> Result<(), Error> {
-    let response = "Shutting down!";
-    ctx.say(response).await?;
-    ctx.framework().shard_manager().shutdown_all().await;
+    match save_config_to_disk() {
+        Ok(_) => {
+            ctx.say("Config saved successfully. Shutting Down!").await?;
+            ctx.framework().shard_manager().shutdown_all().await;
+        }
+        Err(e) => {
+            ctx.say(format!("Failed to save config: {}. Not shutting down!", e)).await?;
+        }
+    }
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    owners_only,
+    hide_in_help
+)]
+pub async fn writeconfig(ctx: Context<'_>) -> Result<(), Error> {
+    match save_config_to_disk() {
+        Ok(_) => ctx.say("Successfully wrote config to disk!").await?,
+        Err(e) => ctx.say(format!("Failed to write config: {}", e)).await?,
+    };
     Ok(())
 }
 

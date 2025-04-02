@@ -1,15 +1,45 @@
 use poise::serenity_prelude::{self as serenity, ChannelId};
-use std::fs;
+use std::{
+    fs,
+    sync::{
+        Arc, RwLock,
+    },
+};
 use toml::Value;
 use std::collections::HashMap;
+use lazy_static::lazy_static;
 
 pub const CONFIG_PATH: &str = "/home/jaster/wut/rs/archbot/config.toml";
 
+lazy_static! {
+    static ref CONFIG_CACHE: Arc<RwLock<Value>> = Arc::new(RwLock::new(load_config_from_disk()));
+}
+
+fn load_config_from_disk() -> Value {
+    match fs::read_to_string(CONFIG_PATH) {
+        Ok(toml_content) => {
+            toml_content.parse::<Value>().unwrap_or_else(|_| {
+                Value::Table(toml::value::Table::new())
+            })
+        },
+        Err(_) => {
+            let default_config = Value::Table(toml::value::Table::new());
+            let _ = fs::write(CONFIG_PATH, toml::to_string_pretty(&default_config).unwrap_or_default());
+            default_config
+        }
+    }
+}
+
+pub fn save_config_to_disk() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = CONFIG_CACHE.read().unwrap();
+    let new_toml = toml::to_string_pretty(&*config)?;
+    fs::write(CONFIG_PATH, new_toml)?;
+    Ok(())
+}
+
 pub fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)
-        .expect("Failed to read config file");
-    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    if let Some(guild_table) = value.get(guild_id.to_string()).and_then(|v| v.as_table()) {
+    let config = CONFIG_CACHE.read().unwrap();
+    if let Some(guild_table) = config.get(guild_id.to_string()).and_then(|v| v.as_table()) {
         if let Some(roles) = guild_table.get("ticket_roles").and_then(|v| v.as_array()) {
             return roles.iter()
                 .filter_map(|v| v.as_integer().map(|x| x as u64))
@@ -20,9 +50,8 @@ pub fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
 }
 
 pub fn add_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)?;
-    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    let guild_table = value
+    let mut config = CONFIG_CACHE.write().unwrap();
+    let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
         .entry(guild_id.to_string())
@@ -37,15 +66,12 @@ pub fn add_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::e
     if !roles.iter().any(|v| v.as_integer() == Some(role_id as i64)) {
         roles.push(Value::Integer(role_id as i64));
     }
-    let new_toml = toml::to_string_pretty(&value)?;
-    fs::write(CONFIG_PATH, new_toml)?;
     Ok(())
 }
 
 pub fn remove_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)?;
-    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    if let Some(guild_table) = value
+    let mut config = CONFIG_CACHE.write().unwrap();
+    if let Some(guild_table) = config
         .as_table_mut()
         .expect("Root should be a table")
         .get_mut(&guild_id.to_string())
@@ -58,16 +84,12 @@ pub fn remove_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std
             roles.retain(|v| v.as_integer() != Some(role_id as i64));
         }
     }
-    let new_toml = toml::to_string_pretty(&value)?;
-    fs::write(CONFIG_PATH, new_toml)?;
     Ok(())
 }
 
 pub fn get_logging_channel(guild_id: u64) -> Option<ChannelId> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)
-        .expect("Failed to read config file");
-    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    let guild_section = value.get(guild_id.to_string())
+    let config = CONFIG_CACHE.read().unwrap();
+    let guild_section = config.get(guild_id.to_string())
         .and_then(|v| v.as_table())?;
     let channel_id = guild_section.get("logging_channel")
         .and_then(|v| v.as_integer())?;
@@ -75,10 +97,8 @@ pub fn get_logging_channel(guild_id: u64) -> Option<ChannelId> {
 }
 
 pub fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)
-        .expect("Failed to read config file");
-    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    value.get(guild_id.to_string())
+    let config = CONFIG_CACHE.read().unwrap();
+    config.get(guild_id.to_string())
         .and_then(|v| v.as_table())
         .and_then(|guild_table| guild_table.get("ticket_category"))
         .and_then(|v| v.as_integer())
@@ -86,10 +106,8 @@ pub fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {
 }
 
 pub fn get_logging_channels() -> HashMap<String, i64> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)
-        .expect("Failed to read config file");
-    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    value.as_table()
+    let config = CONFIG_CACHE.read().unwrap();
+    config.as_table()
         .map(|table| {
             table.iter()
                 .filter_map(|(guild_id, v)| {
@@ -108,10 +126,8 @@ pub fn get_ticket_template_path(guild_id: u64) -> String {
 }
 
 pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)
-        .expect("Failed to read config file");
-    let value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    value.get(guild_id.to_string())
+    let config = CONFIG_CACHE.read().unwrap();
+    config.get(guild_id.to_string())
         .and_then(|v| v.as_table())
         .and_then(|guild_table| guild_table.get("ticket_exempt_role"))
         .and_then(|v| v.as_integer())
@@ -119,9 +135,8 @@ pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
 }
 
 pub fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let toml_content = fs::read_to_string(CONFIG_PATH)?;
-    let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");
-    let guild_table = value
+    let mut config = CONFIG_CACHE.write().unwrap();
+    let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
         .entry(guild_id.to_string())
@@ -129,7 +144,31 @@ pub fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn
         .as_table_mut()
         .expect("Guild section should be a table");
     guild_table.insert("ticket_exempt_role".to_owned().to_string(), Value::Integer(role_id as i64));
-    let new_toml = toml::to_string_pretty(&value)?;
-    fs::write(CONFIG_PATH, new_toml)?;
+    Ok(())
+}
+
+pub fn set_logging_channel(guild_id: u64, channel_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().unwrap();
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert("logging_channel".to_owned().to_string(), Value::Integer(channel_id as i64));
+    Ok(())
+}
+
+pub fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().unwrap();
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert("ticket_category".to_owned().to_string(), Value::Integer(category_id as i64));
     Ok(())
 }
