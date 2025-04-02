@@ -2,8 +2,7 @@
 kick
 
 #logging
-log message posts, deletes, and edits
-output user information on join
+log deletes and edits
 
 #automation
 auto-mod

@@ -13,6 +13,8 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+//use chrono::TimeZone;
+use crate::utils::get_logging_channel;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -33,6 +35,41 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
             }
         }
     }
+}
+
+async fn event_handler(
+    ctx: &serenity::Context,
+    event: &serenity::FullEvent,
+    _framework: poise::FrameworkContext<'_, Data, Error>,
+    _data: &Data,
+) -> Result<(), Error> {
+    match event {
+        serenity::FullEvent::GuildMemberAddition { new_member } => {
+            let guild_id = new_member.guild_id;
+            if let Some(log_channel) = get_logging_channel(guild_id.into()) {
+                let user = &new_member.user;
+                let account_age = chrono::Utc::now().signed_duration_since(*user.created_at());
+                let account_age_days = account_age.num_days();
+                let embed = serenity::CreateEmbed::new()
+                    .title("New Member Joined")
+                    .thumbnail(user.face())
+                    .field("Username", format!("{} ({})", user.tag(), user.id), true)
+                    .field("Account Created", format!(
+                        "<t:{}:D> ({} days ago)",
+                        user.created_at().unix_timestamp(),
+                        account_age_days
+                    ), true)
+                    .field("Is Bot", user.bot.to_string(), true)
+                    .color(serenity::Colour::DARK_GREEN);
+                log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
+            }
+        },
+        serenity::FullEvent::Ready { data_about_bot, .. } => {
+            println!("Logged in as {}", data_about_bot.user.name);
+        },
+        _ => {}
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -89,14 +126,8 @@ async fn main() {
         }),
 */
         skip_checks_for_owners: false,
-        event_handler: |_ctx, event, _framework, _data| {
-            Box::pin(async move {
-                println!(
-                    "Got an event in event handler: {:?}",
-                    event.snake_case_name()
-                );
-                Ok(())
-            })
+        event_handler: |ctx, event, framework, data| {
+            Box::pin(event_handler(ctx, event, framework, data))
         },
         ..Default::default()
     };
@@ -115,7 +146,7 @@ async fn main() {
     let token = var("DISCORD_TOKEN")
         .expect("Missing `DISCORD_TOKEN` env var, see README for more information.");
     let intents =
-        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT | serenity::GatewayIntents::GUILD_MEMBERS;
     let client = serenity::ClientBuilder::new(token, intents)
         .framework(framework)
         .await;
