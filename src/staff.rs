@@ -1,5 +1,6 @@
 use crate::{Context, Error};
-use poise::serenity_prelude::{self as serenity};
+use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::ChannelId;
 
 use crate::utils::*;
 
@@ -9,6 +10,19 @@ use crate::utils::*;
     hide_in_help
 )]
 pub async fn quit(ctx: Context<'_>) -> Result<(), Error> {
+    let logging_channels = get_logging_channels();
+    for (guild_id_str, channel_id) in logging_channels {
+        if let Ok(guild_id) = guild_id_str.parse::<u64>() {
+            let channel = ChannelId::new(channel_id as u64);
+            let embed = serenity::CreateEmbed::new()
+                .title("Bot Shutting Down")
+                .description("The bot is being shut down!")
+                .color(serenity::Colour::DARK_RED);
+            if let Err(e) = channel.send_message(ctx.http(), serenity::CreateMessage::new().embed(embed)).await {
+                println!("Failed to send shutdown announcement to guild {}: {}", guild_id, e);
+            }
+        }
+    }
     match save_config_to_disk() {
         Ok(_) => {
             ctx.say("Config saved successfully. Shutting Down!").await?;

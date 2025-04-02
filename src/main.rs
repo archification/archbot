@@ -7,6 +7,7 @@ mod tickets;
 mod staff;
 
 use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::ChannelId;
 use std::{
     collections::HashMap,
     env::var,
@@ -14,6 +15,7 @@ use std::{
     time::Duration,
 };
 use crate::utils::get_logging_channel;
+use crate::utils::get_logging_channels;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -64,7 +66,7 @@ async fn event_handler(
             }
         },
         serenity::FullEvent::Ready { data_about_bot, .. } => {
-            println!("Logged in as {}", data_about_bot.user.name);
+            println!("Bot has started as {}", data_about_bot.user.name);
         },
         _ => {}
     }
@@ -136,9 +138,23 @@ async fn main() {
             Box::pin(async move {
                 println!("Logged in as {}", _ready.user.name);
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data {
+                let data = Data {
                     votes: Mutex::new(HashMap::new()),
-                })
+                };
+                let logging_channels = get_logging_channels();
+                for (guild_id_str, channel_id) in logging_channels {
+                    if let Ok(guild_id) = guild_id_str.parse::<u64>() {
+                        let channel = ChannelId::new(channel_id as u64);
+                        let embed = serenity::CreateEmbed::new()
+                            .title("Bot Online")
+                            .description("The bot has started successfully!")
+                            .color(serenity::Colour::DARK_GREEN);
+                        if let Err(e) = channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await {
+                            println!("Failed to send boot announcement to guild {}: {}", guild_id, e);
+                        }
+                    }
+                }
+                Ok(data)
             })
         })
         .options(options)
