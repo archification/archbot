@@ -3,15 +3,13 @@ kick
 
 #logging
 log deletes and edits
-output start and quit to log channel
 create bash script for shutting down or rebooting pc that can alias to shutdown and reboot commands which quits the bot first
-
-#automation
-auto-mod
-    finish logging before auto-mod
 
 #security
 anonymous tickets/messages for abuse victims
+
+#oh no
+handle writing config during system shutdown
 
 #casual/game commands
 dice roll
