@@ -6,3 +6,4 @@ run.sh
 logs
 Cargo.lock
 ticket_templates
+prompt
