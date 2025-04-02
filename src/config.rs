@@ -10,69 +10,33 @@ use crate::utils::*;
     slash_command,
     required_permissions = "ADMINISTRATOR",
     category = "Config",
-    guild_only
+    guild_only,
+    subcommands(
+        "log_channel",
+        "ticket_category",
+        "add_ticket_role",
+        "remove_ticket_role",
+        "ticket_message",
+        "ticket_exempt_role",
+        "remove_ticket_exempt_role",
+        "list_ticket_roles"
+    )
 )]
-pub async fn addticketrole(
-    ctx: Context<'_>,
-    #[description = "Role to add to ticket access"] role: serenity::Role,
-) -> Result<(), Error> {
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    add_ticket_role(guild_id.into(), role.id.into())?;
-    ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
+pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
+    poise::builtins::help(
+        ctx,
+        None,
+        poise::builtins::HelpConfiguration {
+            extra_text_at_bottom: "\nUse these subcommands to configure the bot.",
+            ..Default::default()
+        },
+    )
+    .await?;
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn removeticketrole(
-    ctx: Context<'_>,
-    #[description = "Role to remove from ticket access"] role: serenity::Role,
-) -> Result<(), Error> {
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    remove_ticket_role(guild_id.into(), role.id.into())?;
-    ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
-    Ok(())
-}
-
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn listticketroles(
-    ctx: Context<'_>,
-) -> Result<(), Error> {
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let roles = get_ticket_roles(guild_id.into());
-    if roles.is_empty() {
-        ctx.say("No ticket access roles configured").await?;
-        return Ok(());
-    }
-    let mut response = "Ticket access roles:\n".to_string();
-    for role_id in roles {
-        if let Some(role) = ctx.guild().unwrap().roles.get(&serenity::RoleId::new(role_id)) {
-            response.push_str(&format!("- {}\n", role.name));
-        }
-    }
-    ctx.say(response).await?;
-    Ok(())
-}
-
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn setlog(
+#[poise::command(prefix_command, slash_command)]
+pub async fn log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send logs to"] channel: serenity::GuildChannel,
 ) -> Result<(), Error> {
@@ -82,14 +46,8 @@ pub async fn setlog(
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn setticket(
+#[poise::command(prefix_command, slash_command)]
+pub async fn ticket_category(
     ctx: Context<'_>,
     #[description = "Category to use for tickets"]
     #[channel_types("Category")]
@@ -105,14 +63,30 @@ pub async fn setticket(
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn setticketmessage(
+#[poise::command(prefix_command, slash_command)]
+pub async fn add_ticket_role(
+    ctx: Context<'_>,
+    #[description = "Role to add to ticket access"] role: serenity::Role,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    add_ticrole(guild_id.into(), role.id.into())?;
+    ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn remove_ticket_role(
+    ctx: Context<'_>,
+    #[description = "Role to remove from ticket access"] role: serenity::Role,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    remove_ticrole(guild_id.into(), role.id.into())?;
+    ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn ticket_message(
     ctx: Context<'_>,
     #[description = "Text file containing the ticket message template"]
     file: serenity::Attachment,
@@ -131,14 +105,8 @@ pub async fn setticketmessage(
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn setticketexemptrole(
+#[poise::command(prefix_command, slash_command)]
+pub async fn ticket_exempt_role(
     ctx: Context<'_>,
     #[description = "Role that exempts users from seeing the ticket message"]
     role: serenity::Role,
@@ -149,14 +117,8 @@ pub async fn setticketexemptrole(
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    required_permissions = "ADMINISTRATOR",
-    category = "Config",
-    guild_only
-)]
-pub async fn removeticketexemptrole(
+#[poise::command(prefix_command, slash_command)]
+pub async fn remove_ticket_exempt_role(
     ctx: Context<'_>,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
@@ -173,5 +135,25 @@ pub async fn removeticketexemptrole(
     let new_toml = toml::to_string_pretty(&value)?;
     fs::write(CONFIG_PATH, new_toml)?;
     ctx.say("Removed ticket exempt role").await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn list_ticket_roles(
+    ctx: Context<'_>,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let roles = get_ticket_roles(guild_id.into());
+    if roles.is_empty() {
+        ctx.say("No ticket access roles configured").await?;
+        return Ok(());
+    }
+    let mut response = "Ticket access roles:\n".to_string();
+    for role_id in roles {
+        if let Some(role) = ctx.guild().unwrap().roles.get(&serenity::RoleId::new(role_id)) {
+            response.push_str(&format!("- {}\n", role.name));
+        }
+    }
+    ctx.say(response).await?;
     Ok(())
 }

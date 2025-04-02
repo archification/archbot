@@ -49,7 +49,7 @@ pub fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
     Vec::new()
 }
 
-pub fn add_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn add_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config = CONFIG_CACHE.write().unwrap();
     let guild_table = config
         .as_table_mut()
@@ -69,7 +69,7 @@ pub fn add_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-pub fn remove_ticket_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn remove_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config = CONFIG_CACHE.write().unwrap();
     if let Some(guild_table) = config
         .as_table_mut()
