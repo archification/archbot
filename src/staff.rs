@@ -1,6 +1,6 @@
 use crate::{Context, Error};
 use poise::serenity_prelude as serenity;
-use poise::serenity_prelude::ChannelId;
+use poise::serenity_prelude::Mentionable;
 
 use crate::utils::*;
 
@@ -10,15 +10,17 @@ use crate::utils::*;
     hide_in_help
 )]
 pub async fn quit(ctx: Context<'_>) -> Result<(), Error> {
-    let logging_channels = get_logging_channels();
-    for (guild_id_str, channel_id) in logging_channels {
-        if let Ok(guild_id) = guild_id_str.parse::<u64>() {
-            let channel = ChannelId::new(channel_id as u64);
+    let guilds = ctx.cache().guilds();
+    for guild_id in guilds {
+        if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::BootQuit) {
             let embed = serenity::CreateEmbed::new()
                 .title("Bot Shutting Down")
                 .description("The bot is being shut down!")
                 .color(serenity::Colour::DARK_RED);
-            if let Err(e) = channel.send_message(ctx.http(), serenity::CreateMessage::new().embed(embed)).await {
+            if let Err(e) = log_channel.send_message(
+                ctx.http(),
+                serenity::CreateMessage::new().embed(embed)
+            ).await {
                 println!("Failed to send shutdown announcement to guild {}: {}", guild_id, e);
             }
         }
@@ -67,14 +69,30 @@ pub async fn ban(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let reason = reason.unwrap_or_else(|| "No reason provided".to_owned());
     let delete_message_days = delete_message_days.unwrap_or(0);
+
+    // Execute the ban
     guild_id.ban_with_reason(&ctx.http(), user.id, delete_message_days, &reason).await?;
+
+    // Response to command invoker
     let response = format!(
         "🔨 Banned {} ({}) | Reason: {}",
         user.name, user.id, reason
     );
     ctx.say(&response).await?;
-    if let Some(target_channel_id) = get_logging_channel(guild_id.into()) {
-        target_channel_id.say(&ctx.http(), response).await?;
+
+    // Send to mod log channel (falls back to default logging channel)
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+        let embed = serenity::CreateEmbed::new()
+            .title("Member Banned")
+            .description(&response)
+            .field("Moderator", ctx.author().mention().to_string(), true)
+            .field("Message Delete Days", delete_message_days.to_string(), true)
+            .color(serenity::Colour::DARK_RED);
+        log_channel.send_message(
+            &ctx.http(),
+            serenity::CreateMessage::new().embed(embed)
+        ).await?;
     }
+
     Ok(())
 }

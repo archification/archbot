@@ -14,7 +14,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use crate::utils::get_logging_channel;
 use crate::utils::get_logging_channels;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -47,7 +46,10 @@ async fn event_handler(
     match event {
         serenity::FullEvent::GuildMemberAddition { new_member } => {
             let guild_id = new_member.guild_id;
-            if let Some(log_channel) = get_logging_channel(guild_id.into()) {
+            if let Some(log_channel) = crate::utils::get_logging_channel(
+                guild_id.into(),
+                crate::utils::LogEventType::MemberJoinLeave
+            ) {
                 let user = &new_member.user;
                 let account_age = chrono::Utc::now().signed_duration_since(*user.created_at());
                 let account_age_days = account_age.num_days();
@@ -62,6 +64,9 @@ async fn event_handler(
                     ), true)
                     .field("Is Bot", user.bot.to_string(), true)
                     .color(serenity::Colour::DARK_GREEN);
+                if let Some(guild) = new_member.guild_id.to_guild_cached(ctx) {
+                    let _ = embed.clone().field("Member Count", guild.member_count.to_string(), true);
+                }
                 log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
             }
         },

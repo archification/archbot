@@ -15,6 +15,55 @@ lazy_static! {
     static ref CONFIG_CACHE: Arc<RwLock<Value>> = Arc::new(RwLock::new(load_config_from_disk()));
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum LogEventType {
+    BootQuit,
+    MemberJoinLeave,
+    TicketActivity,
+    Moderation,
+    Default,
+    Announcements,
+}
+
+pub fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<ChannelId> {
+    let config = CONFIG_CACHE.read().unwrap();
+    let guild_section = config.get(guild_id.to_string())
+        .and_then(|v| v.as_table())?;
+    let channel_key = match event_type {
+        LogEventType::BootQuit => "boot_quit_channel",
+        LogEventType::MemberJoinLeave => "member_log_channel",
+        LogEventType::TicketActivity => "ticket_log_channel",
+        LogEventType::Moderation => "mod_log_channel",
+        LogEventType::Default => "logging_channel",
+        LogEventType::Announcements => "announcement_channel",
+    };
+    if let Some(channel_id) = guild_section.get(channel_key)
+        .and_then(|v| v.as_integer())
+    {
+        return Some(ChannelId::new(channel_id as u64));
+    }
+    guild_section.get("logging_channel")
+        .and_then(|v| v.as_integer())
+        .map(|channel_id| ChannelId::new(channel_id as u64))
+}
+
+pub fn set_specific_logging_channel(
+    guild_id: u64,
+    channel_key: &str,
+    channel_id: u64
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().unwrap();
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert(channel_key.to_owned(), Value::Integer(channel_id as i64));
+    Ok(())
+}
+
 fn load_config_from_disk() -> Value {
     match fs::read_to_string(CONFIG_PATH) {
         Ok(toml_content) => {
@@ -85,15 +134,6 @@ pub fn remove_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::er
         }
     }
     Ok(())
-}
-
-pub fn get_logging_channel(guild_id: u64) -> Option<ChannelId> {
-    let config = CONFIG_CACHE.read().unwrap();
-    let guild_section = config.get(guild_id.to_string())
-        .and_then(|v| v.as_table())?;
-    let channel_id = guild_section.get("logging_channel")
-        .and_then(|v| v.as_integer())?;
-    Some(ChannelId::new(channel_id as u64))
 }
 
 pub fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {

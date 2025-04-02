@@ -1,6 +1,6 @@
 use crate::{Context, Error};
-
-use crate::utils::*;
+use poise::serenity_prelude::{self as serenity, Mentionable};
+use crate::utils::{get_logging_channel, LogEventType};
 
 #[poise::command(
     prefix_command,
@@ -83,19 +83,44 @@ pub async fn getvotes(
 )]
 pub async fn announce(
     ctx: Context<'_>,
-    #[description = "Message to announce"] message: String,
+    #[description = "Message to announce"]
+    #[rest]
+    message: String,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let guild_id_num: u64 = guild_id.into();
-    println!("Looking up channel for guild ID: {}", guild_id_num);
-    if let Some(target_channel_id) = get_logging_channel(guild_id_num) {
-        println!("Found channel ID: {}", target_channel_id);
-        target_channel_id.say(&ctx.http(), message).await?;
-        ctx.say("Announcement sent!").await?;
-    } else {
-        println!("Available guild IDs in config: {:?}",
-            get_logging_channels().keys().collect::<Vec<_>>());
-        ctx.say("No announcement channel configured for this server.").await?;
+    let announcer = ctx.author();
+    let target_channel = get_logging_channel(guild_id.into(), LogEventType::Announcements)
+        .or_else(|| get_logging_channel(guild_id.into(), LogEventType::Default));
+    match target_channel {
+        Some(channel_id) => {
+            let embed = serenity::CreateEmbed::new()
+                .title("📢 Announcement")
+                .description(&message)
+                .color(serenity::Colour::GOLD);
+            channel_id.send_message(
+                &ctx.http(),
+                serenity::CreateMessage::new()
+                    .embed(embed)
+            ).await?;
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+                let log_embed = serenity::CreateEmbed::new()
+                    .title("Announcement Log")
+                    .description(format!("{}", channel_id.mention()))
+                    .field("Content", &message, false)
+                    .field("Announcer", format!("{}", announcer.mention()), true)
+                    .color(serenity::Colour::DARK_GOLD);
+                log_channel.send_message(
+                    &ctx.http(),
+                    serenity::CreateMessage::new()
+                        .content("📢 Announcement created")
+                        .embed(log_embed)
+                ).await?;
+            }
+            ctx.say("✅ Announcement successfully sent!").await?;
+        }
+        None => {
+            ctx.say("❌ No announcement channel configured for this server.\nUse `/config set_announcement_channel` to set one.").await?;
+        }
     }
     Ok(())
 }

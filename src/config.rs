@@ -1,9 +1,32 @@
 use crate::{Context, Error};
-use poise::serenity_prelude::{self as serenity};
+use poise::serenity_prelude::{self as serenity, Mentionable};
 use toml::Value;
 use std::fs;
 
 use crate::utils::*;
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_log_channel(
+    ctx: Context<'_>,
+    #[description = "Type of events to log"]
+    #[rename = "type"]
+    event_type: String,
+    #[description = "Channel to send logs to"]
+    channel: serenity::GuildChannel,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let channel_key = match event_type.to_lowercase().as_str() {
+        "boot" | "shutdown" => "boot_quit_channel",
+        "member" | "join" | "leave" => "member_log_channel",
+        "ticket" => "ticket_log_channel",
+        "announcement" => "announcement_channel",
+        "mod" | "moderation" => "mod_log_channel",
+        _ => "logging_channel",
+    };
+    set_specific_logging_channel(guild_id.into(), channel_key, channel.id.into())?;
+    ctx.say(format!("Updated {} channel to {}", channel_key, channel.name)).await?;
+    Ok(())
+}
 
 #[poise::command(
     prefix_command,
@@ -19,7 +42,10 @@ use crate::utils::*;
         "ticket_message",
         "ticket_exempt_role",
         "remove_ticket_exempt_role",
-        "list_ticket_roles"
+        "list_ticket_roles",
+        "set_member_log_channel",
+        "set_ticket_log_channel",
+        "set_announcement_channel"
     )
 )]
 pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
@@ -32,6 +58,54 @@ pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
         },
     )
     .await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_announcement_channel(
+    ctx: Context<'_>,
+    #[description = "Channel for announcements"]
+    channel: serenity::GuildChannel,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::set_specific_logging_channel(
+        guild_id.into(),
+        "announcement_channel",
+        channel.id.into()
+    )?;
+    ctx.say(format!("📢 Announcements will now be sent to {}", channel.mention())).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_ticket_log_channel(
+    ctx: Context<'_>,
+    #[description = "Channel to send ticket logs to"]
+    channel: serenity::GuildChannel,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::set_specific_logging_channel(
+        guild_id.into(),
+        "ticket_log_channel",
+        channel.id.into()
+    )?;
+    ctx.say(format!("Updated ticket log channel to {}", channel.name)).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_member_log_channel(
+    ctx: Context<'_>,
+    #[description = "Channel to send member join/leave logs to"]
+    channel: serenity::GuildChannel,
+) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::set_specific_logging_channel(
+        guild_id.into(),
+        "member_log_channel",
+        channel.id.into()
+    )?;
+    ctx.say(format!("Updated member log channel to {}", channel.name)).await?;
     Ok(())
 }
 
