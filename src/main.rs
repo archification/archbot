@@ -1,5 +1,6 @@
 #![warn(clippy::str_to_string)]
 
+mod cluster;
 mod commands;
 mod utils;
 mod config;
@@ -8,19 +9,23 @@ mod staff;
 
 use poise::serenity_prelude as serenity;
 use poise::serenity_prelude::ChannelId;
+use tokio::sync::Mutex;
 use std::{
     collections::HashMap,
     env::var,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 use crate::utils::get_logging_channels;
+use crate::cluster::ClusterState;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
 
+#[derive(Clone)]
 pub struct Data {
-    votes: Mutex<HashMap<String, u32>>,
+    votes: Arc<Mutex<HashMap<String, u32>>>,
+    cluster_state: Arc<Mutex<ClusterState>>,
 }
 
 async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
@@ -41,9 +46,12 @@ async fn event_handler(
     ctx: &serenity::Context,
     event: &serenity::FullEvent,
     _framework: poise::FrameworkContext<'_, Data, Error>,
-    _data: &Data,
+    data: &Data,
 ) -> Result<(), Error> {
     match event {
+        serenity::FullEvent::Message { new_message } => {
+            cluster::handle_cluster_message(ctx, new_message, data.cluster_state.clone(), Arc::new(Mutex::new(data.clone()))).await?;
+        }
         serenity::FullEvent::GuildMemberAddition { new_member } => {
             let guild_id = new_member.guild_id;
             if let Some(log_channel) = crate::utils::get_logging_channel(
@@ -136,9 +144,35 @@ async fn main() {
             Box::pin(async move {
                 println!("Logged in as {}", _ready.user.name);
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                let data = Data {
-                    votes: Mutex::new(HashMap::new()),
+                let cluster_config = match crate::utils::load_cluster_config() {
+                    Ok(config) => config,
+                    Err(e) => {
+                        println!("Failed to load cluster config: {}. Using random instance ID and default priority", e);
+                        crate::utils::ClusterConfig {
+                            cluster: crate::utils::ClusterInfo {
+                                instance_id: format!("instance-{}", rand::random::<u64>()),
+                                priority: 1,
+                            }
+                        }
+                    }
                 };
+                let cluster_state = Arc::new(Mutex::new(ClusterState::new(
+                    cluster_config.cluster.instance_id,
+                    cluster_config.cluster.priority,
+                )));
+                let data = Data {
+                    votes: Arc::new(Mutex::new(HashMap::new())),
+                    cluster_state: cluster_state.clone(),
+                };
+                let ctx_for_cluster = ctx.clone();
+                let data_for_cluster = Arc::new(Mutex::new(data.clone()));
+                tokio::spawn(async move {
+                    cluster::start_cluster_loop(
+                        ctx_for_cluster,
+                        data_for_cluster,
+                        cluster_state.clone()
+                    ).await;
+                });
                 let logging_channels = get_logging_channels();
                 for (guild_id_str, channel_id) in logging_channels {
                     if let Ok(guild_id) = guild_id_str.parse::<u64>() {

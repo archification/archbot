@@ -15,6 +15,11 @@ pub async fn ticket(
     ctx: Context<'_>,
     #[description = "Describe your issue"] issue: Option<String>,
 ) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let author = ctx.author();
     let category_id = match get_ticket_category(guild_id.into()) {
@@ -111,6 +116,11 @@ pub async fn closeticket(
     #[rest]
     reason: Option<String>,
 ) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let channel = ctx.channel_id();
     let closer = ctx.author();

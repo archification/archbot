@@ -66,6 +66,11 @@ pub async fn ban(
     #[max = 7]
     delete_message_days: Option<u8>,
 ) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let reason = reason.unwrap_or_else(|| "No reason provided".to_owned());
     let delete_message_days = delete_message_days.unwrap_or(0);

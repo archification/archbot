@@ -8,11 +8,31 @@ use std::{
 use toml::Value;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
+use serde::Deserialize;
+use serde::Serialize;
 
-pub const CONFIG_PATH: &str = "/home/jaster/wut/rs/archbot/config.toml";
+pub const CONFIG_PATH: &str = "config.toml";
+pub const CLUSTER_CONFIG_PATH: &str = "cluster.toml";
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClusterConfig {
+    pub cluster: ClusterInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClusterInfo {
+    pub instance_id: String,
+    pub priority: i32,
+}
 
 lazy_static! {
     static ref CONFIG_CACHE: Arc<RwLock<Value>> = Arc::new(RwLock::new(load_config_from_disk()));
+}
+
+pub fn load_cluster_config() -> Result<ClusterConfig, Box<dyn std::error::Error + Send + Sync>> {
+    let config_content = fs::read_to_string(CLUSTER_CONFIG_PATH)?;
+    let config: ClusterConfig = toml::from_str(&config_content)?;
+    Ok(config)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -23,6 +43,18 @@ pub enum LogEventType {
     Moderation,
     Default,
     Announcements,
+}
+
+pub fn get_config_as_string() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let config = CONFIG_CACHE.read().unwrap();
+    Ok(toml::to_string_pretty(&*config)?)
+}
+
+pub fn update_config_from_str(config_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let new_config = config_str.parse::<Value>()?;
+    let mut config = CONFIG_CACHE.write().unwrap();
+    *config = new_config;
+    Ok(())
 }
 
 pub fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<ChannelId> {

@@ -13,6 +13,11 @@ pub async fn help(
     #[autocomplete = "poise::builtins::autocomplete_command"]
     command: Option<String>,
 ) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
     poise::builtins::help(
         ctx,
         command.as_deref(),
@@ -34,8 +39,8 @@ pub async fn vote(
     #[description = "What to vote for"] choice: String,
 ) -> Result<(), Error> {
     let num_votes = {
-        let mut hash_map = ctx.data().votes.lock().unwrap();
-        let num_votes = hash_map.entry(choice.clone()).or_default();
+        let mut votes_map = ctx.data().votes.lock().await;
+        let num_votes = votes_map.entry(choice.clone()).or_default();
         *num_votes += 1;
         *num_votes
     };
@@ -54,8 +59,9 @@ pub async fn getvotes(
     ctx: Context<'_>,
     #[description = "Choice to retrieve votes for"] choice: Option<String>,
 ) -> Result<(), Error> {
+    let votes_map = ctx.data().votes.lock().await;
     if let Some(choice) = choice {
-        let num_votes = *ctx.data().votes.lock().unwrap().get(&choice).unwrap_or(&0);
+        let num_votes = votes_map.get(&choice).copied().unwrap_or(0);
         let response = match num_votes {
             0 => format!("Nobody has voted for {} yet", choice),
             _ => format!("{} people have voted for {}", num_votes, choice),
@@ -63,11 +69,12 @@ pub async fn getvotes(
         ctx.say(response).await?;
     } else {
         let mut response = String::new();
-        for (choice, num_votes) in ctx.data().votes.lock().unwrap().iter() {
-            response += &format!("{}: {} votes", choice, num_votes);
-        }
-        if response.is_empty() {
-            response += "Nobody has voted for anything yet :(";
+        if votes_map.is_empty() {
+            response.push_str("Nobody has voted for anything yet :(");
+        } else {
+            for (choice, num_votes) in votes_map.iter() {
+                response.push_str(&format!("{}: {} votes\n", choice, num_votes));
+            }
         }
         ctx.say(response).await?;
     };
@@ -87,6 +94,11 @@ pub async fn announce(
     #[rest]
     message: String,
 ) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let announcer = ctx.author();
     let target_channel = get_logging_channel(guild_id.into(), LogEventType::Announcements)
