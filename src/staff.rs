@@ -74,24 +74,58 @@ pub async fn ban(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let reason = reason.unwrap_or_else(|| "No reason provided".to_owned());
     let delete_message_days = delete_message_days.unwrap_or(0);
-
-    // Execute the ban
     guild_id.ban_with_reason(&ctx.http(), user.id, delete_message_days, &reason).await?;
-
-    // Response to command invoker
     let response = format!(
         "🔨 Banned {} ({}) | Reason: {}",
         user.name, user.id, reason
     );
     ctx.say(&response).await?;
-
-    // Send to mod log channel (falls back to default logging channel)
     if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
         let embed = serenity::CreateEmbed::new()
             .title("Member Banned")
             .description(&response)
             .field("Moderator", ctx.author().mention().to_string(), true)
             .field("Message Delete Days", delete_message_days.to_string(), true)
+            .color(serenity::Colour::DARK_RED);
+        log_channel.send_message(
+            &ctx.http(),
+            serenity::CreateMessage::new().embed(embed)
+        ).await?;
+    }
+
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "BAN_MEMBERS",
+    category = "Moderation",
+    guild_only
+)]
+pub async fn kick(
+    ctx: Context<'_>,
+    #[description = "User to kick"] user: serenity::User,
+    #[description = "Reason for kicking"] reason: Option<String>,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let reason = reason.unwrap_or_else(|| "No reason provided".to_owned());
+    guild_id.kick_with_reason(&ctx.http(), user.id, &reason).await?;
+    let response = format!(
+        "🔨 Kicked {} ({}) | Reason: {}",
+        user.name, user.id, reason
+    );
+    ctx.say(&response).await?;
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+        let embed = serenity::CreateEmbed::new()
+            .title("Member Kicked")
+            .description(&response)
+            .field("Moderator", ctx.author().mention().to_string(), true)
             .color(serenity::Colour::DARK_RED);
         log_channel.send_message(
             &ctx.http(),

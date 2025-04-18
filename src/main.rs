@@ -93,6 +93,7 @@ async fn main() {
             staff::quit(),
             staff::writeconfig(),
             staff::ban(),
+            staff::kick(),
             commands::help(),
             commands::announce(),
             commands::vote(),
