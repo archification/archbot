@@ -29,6 +29,7 @@ pub enum ClusterMessage {
         guild_id: u64,
         content: String,
     },
+    ConfigRequest,
 }
 
 pub struct ClusterState {
@@ -83,22 +84,23 @@ pub async fn start_cluster_loop(
     cluster_state: Arc<Mutex<ClusterState>>,
 ) {
     let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    if let Err(e) = cluster_channel.send_message(&ctx.http,
+        serenity::CreateMessage::new()
+            .content(serde_json::to_string(&ClusterMessage::ConfigRequest).unwrap())
+    ).await {
+        println!("Failed to send config request: {}", e);
+    }
     sleep(Duration::from_secs(5)).await;
-    
     loop {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-
-        // Check for leadership changes
         let became_leader = {
             let mut state = cluster_state.lock().await;
             let leadership_changed = state.check_leader();
             leadership_changed && state.is_leader
         };
-
-        // Send heartbeat (with correct leader status)
         let heartbeat = {
             let state = cluster_state.lock().await;
             ClusterMessage::Heartbeat(InstanceInfo {
@@ -108,15 +110,12 @@ pub async fn start_cluster_loop(
                 is_leader: state.is_leader,
             })
         };
-
         if let Err(e) = cluster_channel.send_message(&ctx.http,
             serenity::CreateMessage::new()
                 .content(serde_json::to_string(&heartbeat).unwrap())
         ).await {
             println!("Failed to send heartbeat: {}", e);
         }
-
-        // If we just became leader, announce it
         if became_leader {
             let announcement = ClusterMessage::LeaderAnnouncement(
                 cluster_state.lock().await.my_instance_id.clone()
@@ -129,13 +128,12 @@ pub async fn start_cluster_loop(
                 println!("Failed to send leader announcement: {}", e);
             }
         }
-
         sleep(Duration::from_secs(HEARTBEAT_INTERVAL)).await;
     }
 }
 
 pub async fn handle_cluster_message(
-    _ctx: &serenity::Context,
+    ctx: &serenity::Context,
     message: &serenity::Message,
     cluster_state: Arc<Mutex<ClusterState>>,
     data: Arc<Mutex<crate::Data>>,
@@ -148,6 +146,20 @@ pub async fn handle_cluster_message(
         Err(_) => return Ok(()),
     };
     match cluster_msg {
+        ClusterMessage::ConfigRequest => {
+            let state = cluster_state.lock().await;
+            if state.is_leader {
+                let config_str = crate::utils::get_config_as_string()?;
+                let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+                cluster_channel.send_message(
+                    ctx,
+                    serenity::CreateMessage::new()
+                        .content(serde_json::to_string(
+                            &ClusterMessage::ConfigUpdate(config_str)
+                        )?)
+                ).await?;
+            }
+        }
         ClusterMessage::Heartbeat(info) => {
             let mut state = cluster_state.lock().await;
             state.update_instance(info);
