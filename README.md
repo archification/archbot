@@ -78,8 +78,9 @@ Running the `/help config` command will show all available subcommands for confi
 * `list_ticket_roles` - List all ticket access roles
 
 ### Owner Commands
-* `quit - Shutdown the bot (owner-only)
-* `writeconfig - Force save config to disk (owner-only)
+* `quit` - Shutdown all bot instances
+* `quit [instance id]` Shutdown specific bot instance
+* `writeconfig` - Force save config to disk (owner-only)
 
 ## Clustering
 The bot supports multiple instances with automatic leader election:
