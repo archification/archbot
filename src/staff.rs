@@ -6,10 +6,23 @@ use crate::utils::*;
 
 #[poise::command(
     prefix_command,
+    slash_command,
     owners_only,
     hide_in_help
 )]
-pub async fn quit(ctx: Context<'_>) -> Result<(), Error> {
+pub async fn quit(
+    ctx: Context<'_>,
+    #[description = "Specific instance ID to kill (leave empty to kill all)"]
+    instance_id: Option<String>,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if let Some(target_instance_id) = &instance_id {
+        if cluster_state.my_instance_id != *target_instance_id {
+            ctx.say(format!("Not shutting down - this instance is '{}'", cluster_state.my_instance_id)).await?;
+            return Ok(());
+        }
+    }
     let guilds = ctx.cache().guilds();
     for guild_id in guilds {
         if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::BootQuit) {
@@ -27,7 +40,13 @@ pub async fn quit(ctx: Context<'_>) -> Result<(), Error> {
     }
     match save_config_to_disk() {
         Ok(_) => {
-            ctx.say("Config saved successfully. Shutting Down!").await?;
+            let message = if instance_id.is_some() {
+                format!("Config saved successfully. Shutting down instance '{}'!",
+                cluster_state.my_instance_id)
+            } else {
+                "Config saved successfully. Shutting down all instances!".to_string()
+            };
+            ctx.say(message).await?;
             ctx.framework().shard_manager().shutdown_all().await;
         }
         Err(e) => {
