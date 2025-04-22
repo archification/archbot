@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use crate::utils::update_config_from_str;
 
-pub const CLUSTER_CHANNEL_ID: u64 = 1362581326745829567;
 const HEARTBEAT_INTERVAL: u64 = 10;
 const LEADER_TIMEOUT: u64 = 60;
 
@@ -38,16 +37,18 @@ pub struct ClusterState {
     pub my_instance_id: String,
     pub my_priority: i32,
     pub is_leader: bool,
+    pub coordination_channel_id: u64,
 }
 
 impl ClusterState {
-    pub fn new(instance_id: String, priority: i32) -> Self {
+    pub fn new(instance_id: String, priority: i32, coordination_channel_id: u64) -> Self {
         ClusterState {
             instances: HashMap::new(),
             current_leader: None,
             my_instance_id: instance_id,
             my_priority: priority,
             is_leader: false,
+            coordination_channel_id,
         }
     }
 
@@ -83,7 +84,11 @@ pub async fn start_cluster_loop(
     _data: Arc<Mutex<crate::Data>>,
     cluster_state: Arc<Mutex<ClusterState>>,
 ) {
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let coordination_channel_id = {
+        let state = cluster_state.lock().await;
+        state.coordination_channel_id
+    };
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     if let Err(e) = cluster_channel.send_message(&ctx.http,
         serenity::CreateMessage::new()
             .content(serde_json::to_string(&ClusterMessage::ConfigRequest).unwrap())
@@ -138,7 +143,11 @@ pub async fn handle_cluster_message(
     cluster_state: Arc<Mutex<ClusterState>>,
     data: Arc<Mutex<crate::Data>>,
 ) -> Result<(), Error> {
-    if message.channel_id != CLUSTER_CHANNEL_ID {
+    let coordination_channel_id = {
+        let state = cluster_state.lock().await;
+        state.coordination_channel_id
+    };
+    if message.channel_id != coordination_channel_id {
         return Ok(());
     }
     let cluster_msg: ClusterMessage = match serde_json::from_str(&message.content) {
@@ -150,7 +159,7 @@ pub async fn handle_cluster_message(
             let state = cluster_state.lock().await;
             if state.is_leader {
                 let config_str = crate::utils::get_config_as_string()?;
-                let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+                let cluster_channel = ChannelId::new(coordination_channel_id);
                 cluster_channel.send_message(
                     ctx,
                     serenity::CreateMessage::new()

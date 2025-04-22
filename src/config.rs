@@ -4,7 +4,6 @@ use poise::serenity_prelude::ChannelId;
 use toml::Value;
 use std::fs;
 use crate::cluster::ClusterMessage;
-use crate::cluster::CLUSTER_CHANNEL_ID;
 
 use crate::utils::*;
 
@@ -16,6 +15,7 @@ pub async fn set_log_channel(
     event_type: String,
     #[description = "Channel to send logs to"]
     channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -34,7 +34,7 @@ pub async fn set_log_channel(
     set_specific_logging_channel(guild_id.into(), channel_key, channel.id.into())?;
     ctx.say(format!("Updated {} channel to {}", channel_key, channel.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -86,6 +86,7 @@ pub async fn set_announcement_channel(
     ctx: Context<'_>,
     #[description = "Channel for announcements"]
     channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -100,7 +101,7 @@ pub async fn set_announcement_channel(
     )?;
     ctx.say(format!("📢 Announcements will now be sent to {}", channel.mention())).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -114,6 +115,7 @@ pub async fn set_ticket_log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send ticket logs to"]
     channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -128,7 +130,7 @@ pub async fn set_ticket_log_channel(
     )?;
     ctx.say(format!("Updated ticket log channel to {}", channel.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -142,6 +144,7 @@ pub async fn set_member_log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send member join/leave logs to"]
     channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -156,7 +159,7 @@ pub async fn set_member_log_channel(
     )?;
     ctx.say(format!("Updated member log channel to {}", channel.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -169,6 +172,7 @@ pub async fn set_member_log_channel(
 pub async fn log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send logs to"] channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -179,7 +183,7 @@ pub async fn log_channel(
     set_logging_channel(guild_id.into(), channel.id.into())?;
     ctx.say(format!("Updated logging channel to {}", channel.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -194,6 +198,7 @@ pub async fn ticket_category(
     #[description = "Category to use for tickets"]
     #[channel_types("Category")]
     channel: serenity::GuildChannel,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -208,7 +213,7 @@ pub async fn ticket_category(
     set_ticket_category(guild_id.into(), channel.id.into())?;
     ctx.say(format!("Updated ticket category to {}", channel.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -221,6 +226,7 @@ pub async fn ticket_category(
 pub async fn add_ticket_role(
     ctx: Context<'_>,
     #[description = "Role to add to ticket access"] role: serenity::Role,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -231,7 +237,7 @@ pub async fn add_ticket_role(
     add_ticrole(guild_id.into(), role.id.into())?;
     ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -244,6 +250,7 @@ pub async fn add_ticket_role(
 pub async fn remove_ticket_role(
     ctx: Context<'_>,
     #[description = "Role to remove from ticket access"] role: serenity::Role,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -254,7 +261,7 @@ pub async fn remove_ticket_role(
     remove_ticrole(guild_id.into(), role.id.into())?;
     ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -268,6 +275,7 @@ pub async fn ticket_message(
     ctx: Context<'_>,
     #[description = "Text file containing the ticket message template"]
     file: serenity::Attachment,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -284,7 +292,7 @@ pub async fn ticket_message(
     std::fs::create_dir_all("./ticket_templates")?;
     let path = get_ticket_template_path(guild_id.into());
     std::fs::write(path, &content)?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     let message = ClusterMessage::TicketTemplateUpdate {
         guild_id: guild_id.into(),
         content: content.clone(),
@@ -305,6 +313,7 @@ pub async fn ticket_exempt_role(
     ctx: Context<'_>,
     #[description = "Role that exempts users from seeing the ticket message"]
     role: serenity::Role,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -315,7 +324,7 @@ pub async fn ticket_exempt_role(
     set_ticket_exempt_role(guild_id.into(), role.id.into())?;
     ctx.say(format!("Set {} as the ticket exempt role", role.name)).await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
@@ -327,6 +336,7 @@ pub async fn ticket_exempt_role(
 #[poise::command(prefix_command, slash_command)]
 pub async fn remove_ticket_exempt_role(
     ctx: Context<'_>,
+    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
@@ -348,7 +358,7 @@ pub async fn remove_ticket_exempt_role(
     fs::write(CONFIG_PATH, new_toml)?;
     ctx.say("Removed ticket exempt role").await?;
     let config_str = crate::utils::get_config_as_string()?;
-    let cluster_channel = ChannelId::new(CLUSTER_CHANNEL_ID);
+    let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()

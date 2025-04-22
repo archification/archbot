@@ -25,6 +25,8 @@ use crate::cluster::ClusterState;
 struct Args {
     #[arg(short, long)]
     dauth: Option<String>,
+    #[arg(short, long)]
+    coordination: Option<u64>,
 }
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -100,6 +102,9 @@ async fn main() {
     let token = args.dauth
         .or_else(|| env::var("DISCORD_TOKEN").ok())
         .expect("Missing Discord token. Please set either DISCORD_TOKEN environment variable or use --dauth argument");
+    let coordination_channel_id = args.coordination
+        .or_else(|| env::var("COORDINATION_CHANNEL_ID").ok().and_then(|s| s.parse().ok()))
+        .expect("Missing coordination channel ID. Please set either COORDINATION_CHANNEL_ID environment variable or use --coordination argument");
     let options = poise::FrameworkOptions {
         commands: vec![
             staff::quit(),
@@ -172,6 +177,7 @@ async fn main() {
                 let cluster_state = Arc::new(Mutex::new(ClusterState::new(
                     cluster_config.cluster.instance_id,
                     cluster_config.cluster.priority,
+                    coordination_channel_id,
                 )));
                 let data = Data {
                     votes: Arc::new(Mutex::new(HashMap::new())),

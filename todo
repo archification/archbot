@@ -13,4 +13,3 @@ handle writing config during system shutdown
 scheduled announcements
 
 log file path in cluster.toml
-env variables or arguments
