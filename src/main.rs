@@ -12,12 +12,20 @@ use poise::serenity_prelude::ChannelId;
 use tokio::sync::Mutex;
 use std::{
     collections::HashMap,
-    env::var,
     sync::Arc,
     time::Duration,
+    env,
 };
+use clap::Parser;
 use crate::utils::get_logging_channels;
 use crate::cluster::ClusterState;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    dauth: Option<String>,
+}
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -88,6 +96,10 @@ async fn event_handler(
 
 #[tokio::main]
 async fn main() {
+    let args = Args::parse();
+    let token = args.dauth
+        .or_else(|| env::var("DISCORD_TOKEN").ok())
+        .expect("Missing Discord token. Please set either DISCORD_TOKEN environment variable or use --dauth argument");
     let options = poise::FrameworkOptions {
         commands: vec![
             staff::quit(),
@@ -192,8 +204,6 @@ async fn main() {
         })
         .options(options)
         .build();
-    let token = var("DISCORD_TOKEN")
-        .expect("Missing `DISCORD_TOKEN` env var, see README for more information.");
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT | serenity::GatewayIntents::GUILD_MEMBERS;
     let client = serenity::ClientBuilder::new(token, intents)
