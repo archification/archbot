@@ -25,7 +25,7 @@ A feature-rich Discord bot with ticket system, moderation tools, announcements, 
 ```toml
 [cluster]
 instance_id = "unique-instance-name"  # Unique identifier for this instance
-priority = 1                         # Leadership priority (higher = more likely to be leader)
+priority = 1                          # Leadership priority (lower = more likely to be leader)
 ```
 
 ### Bot Confuration
@@ -43,6 +43,7 @@ ticket_category = 1234567890         # Category for ticket channels
 ticket_roles = [1234567890]          # Roles with ticket access
 ticket_exempt_role = 1234567890      # Role exempt from seeing ticket message
 ```
+Running the `/help config` command will show all available subcommands for configuration.
 
 ## Commands
 
