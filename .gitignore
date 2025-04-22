@@ -8,3 +8,4 @@ Cargo.lock
 ticket_templates
 prompt
 cluster.toml
+ship/
