@@ -15,13 +15,13 @@ pub async fn set_log_channel(
     event_type: String,
     #[description = "Channel to send logs to"]
     channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let channel_key = match event_type.to_lowercase().as_str() {
         "boot" | "shutdown" => "boot_quit_channel",
@@ -86,13 +86,13 @@ pub async fn set_announcement_channel(
     ctx: Context<'_>,
     #[description = "Channel for announcements"]
     channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     crate::utils::set_specific_logging_channel(
         guild_id.into(),
@@ -115,13 +115,13 @@ pub async fn set_ticket_log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send ticket logs to"]
     channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     crate::utils::set_specific_logging_channel(
         guild_id.into(),
@@ -144,13 +144,13 @@ pub async fn set_member_log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send member join/leave logs to"]
     channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     crate::utils::set_specific_logging_channel(
         guild_id.into(),
@@ -172,13 +172,13 @@ pub async fn set_member_log_channel(
 pub async fn log_channel(
     ctx: Context<'_>,
     #[description = "Channel to send logs to"] channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     set_logging_channel(guild_id.into(), channel.id.into())?;
     ctx.say(format!("Updated logging channel to {}", channel.name)).await?;
@@ -198,13 +198,13 @@ pub async fn ticket_category(
     #[description = "Category to use for tickets"]
     #[channel_types("Category")]
     channel: serenity::GuildChannel,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     if channel.kind != serenity::ChannelType::Category {
         ctx.say("Please select a category channel, not a regular channel").await?;
         return Ok(());
@@ -226,13 +226,13 @@ pub async fn ticket_category(
 pub async fn add_ticket_role(
     ctx: Context<'_>,
     #[description = "Role to add to ticket access"] role: serenity::Role,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     add_ticrole(guild_id.into(), role.id.into())?;
     ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
@@ -250,13 +250,13 @@ pub async fn add_ticket_role(
 pub async fn remove_ticket_role(
     ctx: Context<'_>,
     #[description = "Role to remove from ticket access"] role: serenity::Role,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     remove_ticrole(guild_id.into(), role.id.into())?;
     ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
@@ -275,13 +275,13 @@ pub async fn ticket_message(
     ctx: Context<'_>,
     #[description = "Text file containing the ticket message template"]
     file: serenity::Attachment,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     if !file.filename.ends_with(".txt") {
         ctx.say("Please upload a .txt file").await?;
@@ -302,7 +302,7 @@ pub async fn ticket_message(
         serenity::CreateMessage::new()
             .content(serde_json::to_string(&message)?)
     ).await {
-        println!("Failed to send template update: {}", e);
+        println!("Failed to send template update: {e}");
     }
     ctx.say("Ticket message template updated and synced across instances!").await?;
     Ok(())
@@ -313,13 +313,13 @@ pub async fn ticket_exempt_role(
     ctx: Context<'_>,
     #[description = "Role that exempts users from seeing the ticket message"]
     role: serenity::Role,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     set_ticket_exempt_role(guild_id.into(), role.id.into())?;
     ctx.say(format!("Set {} as the ticket exempt role", role.name)).await?;
@@ -336,13 +336,13 @@ pub async fn ticket_exempt_role(
 #[poise::command(prefix_command, slash_command)]
 pub async fn remove_ticket_exempt_role(
     ctx: Context<'_>,
-    coordination_channel_id: u64,
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
     if !cluster_state.is_leader {
         return Ok(());
     }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let toml_content = fs::read_to_string(CONFIG_PATH)?;
     let mut value = toml_content.parse::<Value>().expect("Failed to parse TOML");

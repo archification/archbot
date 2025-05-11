@@ -168,16 +168,16 @@ pub async fn closeticket(
             if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
                 log_channel.say(
                     &ctx.http(),
-                    format!("✅ Successfully deleted ticket channel: `{}`", channel_name)
+                    format!("✅ Successfully deleted ticket channel: `{channel_name}`")
                 ).await?;
             }
         }
         Err(e) => {
-            println!("Failed to delete ticket channel: {}", e);
+            println!("Failed to delete ticket channel: {e}");
             if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
                 log_channel.say(
                     &ctx.http(),
-                    format!("⚠️ Failed to delete ticket channel `{}`: {}", channel_name, e)
+                    format!("⚠️ Failed to delete ticket channel `{channel_name}`: {e}")
                 ).await?;
             }
         }

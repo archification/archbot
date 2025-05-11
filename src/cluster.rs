@@ -93,7 +93,7 @@ pub async fn start_cluster_loop(
         serenity::CreateMessage::new()
             .content(serde_json::to_string(&ClusterMessage::ConfigRequest).unwrap())
     ).await {
-        println!("Failed to send config request: {}", e);
+        println!("Failed to send config request: {e}");
     }
     sleep(Duration::from_secs(5)).await;
     loop {
@@ -119,7 +119,7 @@ pub async fn start_cluster_loop(
             serenity::CreateMessage::new()
                 .content(serde_json::to_string(&heartbeat).unwrap())
         ).await {
-            println!("Failed to send heartbeat: {}", e);
+            println!("Failed to send heartbeat: {e}");
         }
         if became_leader {
             let announcement = ClusterMessage::LeaderAnnouncement(
@@ -130,7 +130,7 @@ pub async fn start_cluster_loop(
                 serenity::CreateMessage::new()
                     .content(serde_json::to_string(&announcement).unwrap())
             ).await {
-                println!("Failed to send leader announcement: {}", e);
+                println!("Failed to send leader announcement: {e}");
             }
         }
         sleep(Duration::from_secs(HEARTBEAT_INTERVAL)).await;
@@ -181,7 +181,7 @@ pub async fn handle_cluster_message(
             }
             let _data = data.lock().await;
             if let Err(e) = update_config_from_str(&config) {
-                println!("Failed to update config: {}", e);
+                println!("Failed to update config: {e}");
             }
         }
         ClusterMessage::LeaderAnnouncement(instance_id) => {
@@ -197,7 +197,7 @@ pub async fn handle_cluster_message(
             if let Err(e) = std::fs::create_dir_all("./ticket_templates")
                 .and_then(|_| std::fs::write(path, content))
             {
-                println!("Failed to save ticket template for guild {}: {}", guild_id, e);
+                println!("Failed to save ticket template for guild {guild_id}: {e}");
             }
         }
     }

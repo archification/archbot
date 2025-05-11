@@ -6,7 +6,9 @@ use crate::utils::*;
 
 #[poise::command(
     prefix_command,
+/*
     slash_command,
+*/
     owners_only,
     hide_in_help
 )]
@@ -17,24 +19,33 @@ pub async fn quit(
 ) -> Result<(), Error> {
     let data = ctx.data();
     let cluster_state = data.cluster_state.lock().await;
-    if let Some(target_instance_id) = &instance_id {
-        if cluster_state.my_instance_id != *target_instance_id {
-            ctx.say(format!("Not shutting down - this instance is '{}'", cluster_state.my_instance_id)).await?;
-            return Ok(());
+    let should_shutdown = match &instance_id {
+        Some(target_instance_id) => {
+            cluster_state.my_instance_id == *target_instance_id
         }
+        None => true,
+    };
+    if !should_shutdown {
+        let response = format!(
+            "Not shutting down - this instance is '{}'",
+            cluster_state.my_instance_id
+        );
+        ctx.say(response).await?;
+        return Ok(());
     }
     let guilds = ctx.cache().guilds();
     for guild_id in guilds {
         if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::BootQuit) {
+            let something = format!("{} is being shut down!", cluster_state.my_instance_id);
             let embed = serenity::CreateEmbed::new()
-                .title("Bot Shutting Down")
-                .description("The bot is being shut down!")
+                .title("Instance Shutting Down")
+                .description(something)
                 .color(serenity::Colour::DARK_RED);
             if let Err(e) = log_channel.send_message(
                 ctx.http(),
                 serenity::CreateMessage::new().embed(embed)
             ).await {
-                println!("Failed to send shutdown announcement to guild {}: {}", guild_id, e);
+                println!("Failed to send shutdown announcement to guild {guild_id}: {e}");
             }
         }
     }
@@ -46,11 +57,15 @@ pub async fn quit(
             } else {
                 "Config saved successfully. Shutting down all instances!".to_string()
             };
-            ctx.say(message).await?;
+            if ctx.invocation_string().starts_with('/') {
+                ctx.send(poise::CreateReply::default().content(message).ephemeral(true)).await?;
+            } else {
+                ctx.say(message).await?;
+            }
             ctx.framework().shard_manager().shutdown_all().await;
         }
         Err(e) => {
-            ctx.say(format!("Failed to save config: {}. Not shutting down!", e)).await?;
+            ctx.say(format!("Failed to save config: {e}. Not shutting down!")).await?;
         }
     }
     Ok(())
@@ -64,7 +79,7 @@ pub async fn quit(
 pub async fn writeconfig(ctx: Context<'_>) -> Result<(), Error> {
     match save_config_to_disk() {
         Ok(_) => ctx.say("Successfully wrote config to disk!").await?,
-        Err(e) => ctx.say(format!("Failed to write config: {}", e)).await?,
+        Err(e) => ctx.say(format!("Failed to write config: {e}")).await?,
     };
     Ok(())
 }
@@ -151,6 +166,5 @@ pub async fn kick(
             serenity::CreateMessage::new().embed(embed)
         ).await?;
     }
-
     Ok(())
 }

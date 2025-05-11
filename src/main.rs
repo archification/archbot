@@ -40,13 +40,13 @@ pub struct Data {
 
 async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     match error {
-        poise::FrameworkError::Setup { error, .. } => panic!("Failed to start bot: {:?}", error),
+        poise::FrameworkError::Setup { error, .. } => panic!("Failed to start bot: {error}"),
         poise::FrameworkError::Command { error, ctx, .. } => {
             println!("Error in command `{}`: {:?}", ctx.command().name, error,);
         }
         error => {
             if let Err(e) = poise::builtins::on_error(error).await {
-                println!("Error while handling error: {}", e)
+                println!("Error while handling error: {e}")
             }
         }
     }
@@ -115,6 +115,7 @@ async fn main() {
             commands::announce(),
             commands::vote(),
             commands::getvotes(),
+            commands::diceroll(),
             config::config(),
             tickets::ticket(),
             tickets::closeticket(),
@@ -165,7 +166,7 @@ async fn main() {
                 let cluster_config = match crate::utils::load_cluster_config() {
                     Ok(config) => config,
                     Err(e) => {
-                        println!("Failed to load cluster config: {}. Using random instance ID and default priority", e);
+                        println!("Failed to load cluster config: {e}. Using random instance ID and default priority");
                         crate::utils::ClusterConfig {
                             cluster: crate::utils::ClusterInfo {
                                 instance_id: format!("instance-{}", rand::random::<u64>()),
@@ -196,12 +197,14 @@ async fn main() {
                 for (guild_id_str, channel_id) in logging_channels {
                     if let Ok(guild_id) = guild_id_str.parse::<u64>() {
                         let channel = ChannelId::new(channel_id as u64);
+                        let cluster_state = data.cluster_state.lock().await;
+                        let something = format!("Instance {} has started successfully!", cluster_state.my_instance_id);
                         let embed = serenity::CreateEmbed::new()
-                            .title("Bot Online")
-                            .description("The bot has started successfully!")
+                            .title("Instance Online")
+                            .description(something)
                             .color(serenity::Colour::DARK_GREEN);
                         if let Err(e) = channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await {
-                            println!("Failed to send boot announcement to guild {}: {}", guild_id, e);
+                            println!("Failed to send boot announcement to guild {guild_id}: {e}");
                         }
                     }
                 }

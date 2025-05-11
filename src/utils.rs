@@ -194,7 +194,7 @@ pub fn get_logging_channels() -> HashMap<String, i64> {
 }
 
 pub fn get_ticket_template_path(guild_id: u64) -> String {
-    format!("./ticket_templates/{}.txt", guild_id)
+    format!("./ticket_templates/{guild_id}.txt")
 }
 
 pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
