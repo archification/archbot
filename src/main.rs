@@ -88,6 +88,33 @@ async fn event_handler(
                 log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
             }
         },
+        serenity::FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
+            let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
+            if let Some(log_channel) = crate::utils::get_logging_channel(
+                guild_id_u64,
+                crate::utils::LogEventType::MemberJoinLeave
+            ) {
+                let joined_at = if let Some(guild) = guild_id.to_guild_cached(ctx) {
+                    guild.members.get(&user.id).and_then(|m| m.joined_at)
+                } else {
+                    None
+                };
+                let embed = serenity::CreateEmbed::new()
+                    .title("Member Left")
+                    .thumbnail(user.face())
+                    .field("Username", format!("{} ({})", user.tag(), user.id), true)
+                    .field("Joined At", match joined_at {
+                        Some(joined_at) => format!("<t:{}:D>", joined_at.unix_timestamp()),
+                        None => "Unknown".to_owned().to_string(),
+                    }, true)
+                    .field("Is Bot", user.bot.to_string(), true)
+                    .color(serenity::Colour::DARK_RED);
+                if let Some(guild) = guild_id.to_guild_cached(ctx) {
+                    let _ = embed.clone().field("Member Count", guild.member_count.to_string(), true);
+                }
+                log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
+            }
+        },
         serenity::FullEvent::Ready { data_about_bot, .. } => {
             println!("Bot has started as {}", data_about_bot.user.name);
         },
