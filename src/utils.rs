@@ -43,6 +43,7 @@ pub enum LogEventType {
     Moderation,
     Default,
     Announcements,
+    MessageDeletion,
 }
 
 pub fn get_config_as_string() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -68,6 +69,7 @@ pub fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<Ch
         LogEventType::Moderation => "mod_log_channel",
         LogEventType::Default => "logging_channel",
         LogEventType::Announcements => "announcement_channel",
+        LogEventType::MessageDeletion => "message_log_channel"
     };
     if let Some(channel_id) = guild_section.get(channel_key)
         .and_then(|v| v.as_integer())

@@ -9,6 +9,7 @@ mod staff;
 
 use poise::serenity_prelude as serenity;
 use poise::serenity_prelude::ChannelId;
+use poise::serenity_prelude::Mentionable;
 use tokio::sync::Mutex;
 use std::{
     collections::HashMap,
@@ -115,6 +116,52 @@ async fn event_handler(
                 log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
             }
         },
+        serenity::FullEvent::MessageDelete { channel_id, deleted_message_id, guild_id: Some(guild_id) } => {
+            let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
+            if let Some(log_channel) = crate::utils::get_logging_channel(
+                guild_id_u64,
+                crate::utils::LogEventType::MessageDeletion
+            ) {
+                let mut embed = serenity::CreateEmbed::new()
+                    .title("Message Deleted")
+                    .description(format!("Message deleted in {}", channel_id.mention()))
+                    .color(serenity::Colour::DARK_ORANGE);
+                let (author_mention, content) = {
+                    let cached_message = ctx.cache.message(*channel_id, *deleted_message_id);
+                    if let Some(msg) = cached_message {
+                        (Some(msg.author.mention().to_string()), Some(msg.content.clone()))
+                    } else {
+                        (None, None)
+                    }
+                };
+                if let Some(author_mention) = author_mention {
+                    embed = embed.field("Author", author_mention, true);
+                }
+                if let Some(content) = content {
+                    embed = embed.field("Content", content, false);
+                } else {
+                    embed = embed.field("Message ID", deleted_message_id.to_string(), true);
+                }
+                log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
+            }
+        },
+        serenity::FullEvent::MessageDeleteBulk { channel_id, multiple_deleted_messages_ids, guild_id: Some(guild_id) } => {
+            let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
+            if let Some(log_channel) = crate::utils::get_logging_channel(
+                guild_id_u64,
+                crate::utils::LogEventType::MessageDeletion
+            ) {
+                let embed = serenity::CreateEmbed::new()
+                    .title("Bulk Message Deletion")
+                    .description(format!(
+                        "{}, messages deleted in {}",
+                        multiple_deleted_messages_ids.len(),
+                        channel_id.mention()
+                    ))
+                    .color(serenity::Colour::DARK_ORANGE);
+                log_channel.send_message(ctx, serenity::CreateMessage::new().embed(embed)).await?;
+            }
+        },
         serenity::FullEvent::Ready { data_about_bot, .. } => {
             println!("Bot has started as {}", data_about_bot.user.name);
         },
@@ -169,16 +216,6 @@ async fn main() {
                 println!("Executed command {}!", ctx.command().qualified_name);
             })
         },
-/*
-        command_check: Some(|ctx| {
-            Box::pin(async move {
-                if ctx.author().id == 204537370224099328 {
-                    return Ok(true);
-                }
-                Ok(false)
-            })
-        }),
-*/
         skip_checks_for_owners: false,
         event_handler: |ctx, event, framework, data| {
             Box::pin(event_handler(ctx, event, framework, data))

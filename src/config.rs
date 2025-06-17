@@ -29,6 +29,7 @@ pub async fn set_log_channel(
         "ticket" => "ticket_log_channel",
         "announcement" => "announcement_channel",
         "mod" | "moderation" => "mod_log_channel",
+        "message" | "deletion" => "message_log_channel",
         _ => "logging_channel",
     };
     set_specific_logging_channel(guild_id.into(), channel_key, channel.id.into())?;
