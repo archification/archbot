@@ -1,15 +1,11 @@
-#commands to use on members
-kick
+member join and leave stats
 
 #logging
 log deletes and edits
-
-#security
-anonymous tickets/messages for abuse victims
 
 #oh no
 handle writing config during system shutdown
 
 scheduled announcements
 
-log file path in cluster.toml
+path to log file in cluster.toml

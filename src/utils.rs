@@ -1,9 +1,8 @@
 use poise::serenity_prelude::{self as serenity, ChannelId};
+use tokio::sync::RwLock;
 use std::{
     fs,
-    sync::{
-        Arc, RwLock,
-    },
+    sync::Arc,
 };
 use toml::Value;
 use std::collections::HashMap;
@@ -46,20 +45,20 @@ pub enum LogEventType {
     MessageDeletion,
 }
 
-pub fn get_config_as_string() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_config_as_string() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let config = CONFIG_CACHE.read().await;
     Ok(toml::to_string_pretty(&*config)?)
 }
 
-pub fn update_config_from_str(config_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn update_config_from_str(config_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let new_config = config_str.parse::<Value>()?;
-    let mut config = CONFIG_CACHE.write().unwrap();
+    let mut config = CONFIG_CACHE.write().await;
     *config = new_config;
     Ok(())
 }
 
-pub fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<ChannelId> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<ChannelId> {
+    let config = CONFIG_CACHE.read().await;
     let guild_section = config.get(guild_id.to_string())
         .and_then(|v| v.as_table())?;
     let channel_key = match event_type {
@@ -81,12 +80,12 @@ pub fn get_logging_channel(guild_id: u64, event_type: LogEventType) -> Option<Ch
         .map(|channel_id| ChannelId::new(channel_id as u64))
 }
 
-pub fn set_specific_logging_channel(
+pub async fn set_specific_logging_channel(
     guild_id: u64,
     channel_key: &str,
     channel_id: u64
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+    let mut config = CONFIG_CACHE.write().await;
     let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -113,15 +112,15 @@ fn load_config_from_disk() -> Value {
     }
 }
 
-pub fn save_config_to_disk() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn save_config_to_disk() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = CONFIG_CACHE.read().await;
     let new_toml = toml::to_string_pretty(&*config)?;
     fs::write(CONFIG_PATH, new_toml)?;
     Ok(())
 }
 
-pub fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
+    let config = CONFIG_CACHE.read().await;
     if let Some(guild_table) = config.get(guild_id.to_string()).and_then(|v| v.as_table()) {
         if let Some(roles) = guild_table.get("ticket_roles").and_then(|v| v.as_array()) {
             return roles.iter()
@@ -132,8 +131,8 @@ pub fn get_ticket_roles(guild_id: u64) -> Vec<u64> {
     Vec::new()
 }
 
-pub fn add_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+pub async fn add_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
     let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -152,8 +151,8 @@ pub fn add_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-pub fn remove_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+pub async fn remove_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
     if let Some(guild_table) = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -170,8 +169,8 @@ pub fn remove_ticrole(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {
+    let config = CONFIG_CACHE.read().await;
     config.get(guild_id.to_string())
         .and_then(|v| v.as_table())
         .and_then(|guild_table| guild_table.get("ticket_category"))
@@ -179,8 +178,8 @@ pub fn get_ticket_category(guild_id: u64) -> Option<serenity::ChannelId> {
         .map(|category_id| serenity::ChannelId::new(category_id as u64))
 }
 
-pub fn get_logging_channels() -> HashMap<String, i64> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_logging_channels() -> HashMap<String, i64> {
+    let config = CONFIG_CACHE.read().await;
     config.as_table()
         .map(|table| {
             table.iter()
@@ -199,8 +198,8 @@ pub fn get_ticket_template_path(guild_id: u64) -> String {
     format!("./ticket_templates/{guild_id}.txt")
 }
 
-pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
-    let config = CONFIG_CACHE.read().unwrap();
+pub async fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
+    let config = CONFIG_CACHE.read().await;
     config.get(guild_id.to_string())
         .and_then(|v| v.as_table())
         .and_then(|guild_table| guild_table.get("ticket_exempt_role"))
@@ -208,8 +207,8 @@ pub fn get_ticket_exempt_role(guild_id: u64) -> Option<u64> {
         .map(|role_id| role_id as u64)
 }
 
-pub fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+pub async fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
     let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -221,8 +220,8 @@ pub fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), Box<dyn
     Ok(())
 }
 
-pub fn set_logging_channel(guild_id: u64, channel_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+pub async fn set_logging_channel(guild_id: u64, channel_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
     let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -234,8 +233,8 @@ pub fn set_logging_channel(guild_id: u64, channel_id: u64) -> Result<(), Box<dyn
     Ok(())
 }
 
-pub fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().unwrap();
+pub async fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
     let guild_table = config
         .as_table_mut()
         .expect("Root should be a table")
@@ -245,4 +244,65 @@ pub fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), Box<dy
         .expect("Guild section should be a table");
     guild_table.insert("ticket_category".to_owned().to_string(), Value::Integer(category_id as i64));
     Ok(())
+}
+
+pub async fn add_react_role(
+    guild_id: u64,
+    message_id: u64,
+    emoji: String,
+    role_id: u64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    let react_roles_table = guild_table
+        .entry("react_roles".to_owned().to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("react_roles should be a table");
+    let message_mappings = react_roles_table
+        .entry(message_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("message mapping should be a table");
+    message_mappings.insert(emoji, Value::Integer(role_id as i64));
+    Ok(())
+}
+
+pub async fn remove_react_role(
+    guild_id: u64,
+    message_id: u64,
+    emoji: &str,
+) -> Result<Option<u64>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    if let Some(guild_table) = config.as_table_mut().and_then(|r| r.get_mut(&guild_id.to_string())).and_then(|g| g.as_table_mut()) {
+        if let Some(react_roles_table) = guild_table.get_mut("react_roles").and_then(|rr| rr.as_table_mut()) {
+            if let Some(message_mappings) = react_roles_table.get_mut(&message_id.to_string()).and_then(|m| m.as_table_mut()) {
+                // Remove the key (the emoji) and get its value (the role_id)
+                if let Some(removed_value) = message_mappings.remove(emoji) {
+                    // Successfully removed the mapping. Return the role ID that was removed.
+                    return Ok(removed_value.as_integer().map(|id| id as u64));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+pub async fn get_react_role(guild_id: u64, message_id: u64, emoji: &str) -> Option<u64> {
+    let config = CONFIG_CACHE.read().await;
+    config.get(guild_id.to_string())
+        .and_then(|v| v.as_table())
+        .and_then(|guild_table| guild_table.get("react_roles"))
+        .and_then(|react_roles| react_roles.as_table())
+        .and_then(|messages| messages.get(&message_id.to_string()))
+        .and_then(|v| v.as_table())
+        .and_then(|emoji_map| emoji_map.get(emoji))
+        .and_then(|v| v.as_integer())
+        .map(|role_id| role_id as u64)
 }

@@ -22,7 +22,7 @@ pub async fn ticket(
     }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let author = ctx.author();
-    let category_id = match get_ticket_category(guild_id.into()) {
+    let category_id = match get_ticket_category(guild_id.into()).await {
         Some(id) => id,
         None => {
             ctx.say("❌ Ticket system not configured. Admins must set a ticket category first.").await?;
@@ -46,7 +46,7 @@ pub async fn ticket(
             kind: PermissionOverwriteType::Role(GuildId::everyone_role(&guild_id)),
         }
     ];
-    for role_id in get_ticket_roles(guild_id.into()) {
+    for role_id in get_ticket_roles(guild_id.into()).await {
         permissions.push(PermissionOverwrite {
             allow: Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES |
                    Permissions::MANAGE_MESSAGES,
@@ -62,7 +62,7 @@ pub async fn ticket(
             .permissions(permissions)
     ).await?;
     channel.say(&ctx.http(), format!("{} created this ticket", author.mention())).await?;
-    let show_message = match get_ticket_exempt_role(guild_id.into()) {
+    let show_message = match get_ticket_exempt_role(guild_id.into()).await {
         Some(exempt_role_id) => {
             let member = guild_id.member(&ctx.http(), author.id).await?;
             !member.roles.contains(&serenity::RoleId::new(exempt_role_id))
@@ -86,7 +86,7 @@ pub async fn ticket(
     channel.send_message(&ctx.http(),
         serenity::CreateMessage::new().embed(embed)
     ).await?;
-    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
         let log_embed = serenity::CreateEmbed::new()
             .title("New Ticket Created")
             .description(format!("[Jump to Ticket]({})", channel.id.mention()))
@@ -146,7 +146,7 @@ pub async fn closeticket(
         .field("Closed At", format!("<t:{}:F>", chrono::Utc::now().timestamp()), true)
         .color(serenity::Colour::DARK_RED);
     channel.send_message(&ctx.http(), CreateMessage::new().embed(embed)).await?;
-    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
         let log_embed = CreateEmbed::new()
             .title("Ticket Closed")
             .description(format!("[Original Ticket]({})", channel.mention()))
@@ -165,7 +165,7 @@ pub async fn closeticket(
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     match channel.delete(&ctx.http()).await {
         Ok(_) => {
-            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
                 log_channel.say(
                     &ctx.http(),
                     format!("✅ Successfully deleted ticket channel: `{channel_name}`")
@@ -174,7 +174,7 @@ pub async fn closeticket(
         }
         Err(e) => {
             println!("Failed to delete ticket channel: {e}");
-            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity) {
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
                 log_channel.say(
                     &ctx.http(),
                     format!("⚠️ Failed to delete ticket channel `{channel_name}`: {e}")

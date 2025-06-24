@@ -59,7 +59,50 @@ async fn event_handler(
     _framework: poise::FrameworkContext<'_, Data, Error>,
     data: &Data,
 ) -> Result<(), Error> {
+    let is_leader = data.cluster_state.lock().await.is_leader;
     match event {
+        serenity::FullEvent::ReactionAdd { add_reaction } => {
+            if add_reaction.user_id == Some(_framework.bot_id) {
+                return Ok(());
+            }
+            if !is_leader {
+                return Ok(());
+            }
+            if let (Some(guild_id), Some(user_id)) = (add_reaction.guild_id, add_reaction.user_id) {
+                let emoji_str = add_reaction.emoji.to_string();
+                if let Some(role_id) = crate::utils::get_react_role(
+                    guild_id.into(),
+                    add_reaction.message_id.into(),
+                    &emoji_str
+                ).await {
+                    let member = guild_id.member(&ctx.http, user_id).await?;
+                    if let Err(e) = member.add_role(&ctx.http, role_id).await {
+                        println!("Failed to add role {} to user {}: {}", &role_id, &user_id, e);
+                    }
+                }
+            }
+        }
+        serenity::FullEvent::ReactionRemove { removed_reaction } => {
+            if removed_reaction.user_id == Some(_framework.bot_id) {
+                return Ok(());
+            }
+            if !is_leader {
+                return Ok(());
+            }
+            if let (Some(guild_id), Some(user_id)) = (removed_reaction.guild_id, removed_reaction.user_id) {
+                let emoji_str = removed_reaction.emoji.to_string();
+                if let Some(role_id) = crate::utils::get_react_role(
+                    guild_id.into(),
+                    removed_reaction.message_id.into(),
+                    &emoji_str
+                ).await {
+                    let member = guild_id.member(&ctx.http, user_id).await?;
+                    if let Err(e) = member.remove_role(&ctx.http, role_id).await {
+                         println!("Failed to remove role {} from user {}: {}", &role_id, &user_id, &e);
+                    }
+                }
+            }
+        }
         serenity::FullEvent::Message { new_message } => {
             cluster::handle_cluster_message(ctx, new_message, data.cluster_state.clone(), Arc::new(Mutex::new(data.clone()))).await?;
         }
@@ -68,7 +111,7 @@ async fn event_handler(
             if let Some(log_channel) = crate::utils::get_logging_channel(
                 guild_id.into(),
                 crate::utils::LogEventType::MemberJoinLeave
-            ) {
+            ).await {
                 let user = &new_member.user;
                 let account_age = chrono::Utc::now().signed_duration_since(*user.created_at());
                 let account_age_days = account_age.num_days();
@@ -94,7 +137,7 @@ async fn event_handler(
             if let Some(log_channel) = crate::utils::get_logging_channel(
                 guild_id_u64,
                 crate::utils::LogEventType::MemberJoinLeave
-            ) {
+            ).await {
                 let joined_at = if let Some(guild) = guild_id.to_guild_cached(ctx) {
                     guild.members.get(&user.id).and_then(|m| m.joined_at)
                 } else {
@@ -121,7 +164,7 @@ async fn event_handler(
             if let Some(log_channel) = crate::utils::get_logging_channel(
                 guild_id_u64,
                 crate::utils::LogEventType::MessageDeletion
-            ) {
+            ).await {
                 let mut embed = serenity::CreateEmbed::new()
                     .title("Message Deleted")
                     .description(format!("Message deleted in {}", channel_id.mention()))
@@ -150,7 +193,7 @@ async fn event_handler(
             if let Some(log_channel) = crate::utils::get_logging_channel(
                 guild_id_u64,
                 crate::utils::LogEventType::MessageDeletion
-            ) {
+            ).await {
                 let embed = serenity::CreateEmbed::new()
                     .title("Bulk Message Deletion")
                     .description(format!(
@@ -257,7 +300,7 @@ async fn main() {
                         cluster_state.clone()
                     ).await;
                 });
-                let logging_channels = get_logging_channels();
+                let logging_channels = get_logging_channels().await;
                 for (guild_id_str, channel_id) in logging_channels {
                     if let Ok(guild_id) = guild_id_str.parse::<u64>() {
                         let channel = ChannelId::new(channel_id as u64);
@@ -278,7 +321,10 @@ async fn main() {
         .options(options)
         .build();
     let intents =
-        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT | serenity::GatewayIntents::GUILD_MEMBERS;
+        serenity::GatewayIntents::non_privileged()
+        | serenity::GatewayIntents::MESSAGE_CONTENT
+        | serenity::GatewayIntents::GUILD_MEMBERS
+        | serenity::GatewayIntents::GUILD_MESSAGE_REACTIONS;
     let client = serenity::ClientBuilder::new(token, intents)
         .framework(framework)
         .await;

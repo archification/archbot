@@ -102,8 +102,14 @@ pub async fn announce(
     }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let announcer = ctx.author();
-    let target_channel = get_logging_channel(guild_id.into(), LogEventType::Announcements)
-        .or_else(|| get_logging_channel(guild_id.into(), LogEventType::Default));
+    let mut target_channel = get_logging_channel(guild_id.into(), LogEventType::Announcements).await;
+    if target_channel.is_none() {
+        target_channel = get_logging_channel(guild_id.into(), LogEventType::Default).await;
+    }
+    /*
+    let target_channel = get_logging_channel(guild_id.into(), LogEventType::Announcements).await
+        .or_else(|| get_logging_channel(guild_id.into(), LogEventType::Default).await);
+    */
     match target_channel {
         Some(channel_id) => {
             let embed = serenity::CreateEmbed::new()
@@ -115,7 +121,7 @@ pub async fn announce(
                 serenity::CreateMessage::new()
                     .embed(embed)
             ).await?;
-            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation).await {
                 let log_embed = serenity::CreateEmbed::new()
                     .title("Announcement Log")
                     .description(format!("{}", channel_id.mention()))

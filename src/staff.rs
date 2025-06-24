@@ -35,7 +35,7 @@ pub async fn quit(
     }
     let guilds = ctx.cache().guilds();
     for guild_id in guilds {
-        if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::BootQuit) {
+        if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::BootQuit).await {
             let something = format!("{} is being shut down!", cluster_state.my_instance_id);
             let embed = serenity::CreateEmbed::new()
                 .title("Instance Shutting Down")
@@ -49,7 +49,7 @@ pub async fn quit(
             }
         }
     }
-    match save_config_to_disk() {
+    match save_config_to_disk().await {
         Ok(_) => {
             let message = if instance_id.is_some() {
                 format!("Config saved successfully. Shutting down instance '{}'!",
@@ -77,7 +77,7 @@ pub async fn quit(
     hide_in_help
 )]
 pub async fn writeconfig(ctx: Context<'_>) -> Result<(), Error> {
-    match save_config_to_disk() {
+    match save_config_to_disk().await {
         Ok(_) => ctx.say("Successfully wrote config to disk!").await?,
         Err(e) => ctx.say(format!("Failed to write config: {e}")).await?,
     };
@@ -114,7 +114,7 @@ pub async fn ban(
         user.name, user.id, reason
     );
     ctx.say(&response).await?;
-    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation).await {
         let embed = serenity::CreateEmbed::new()
             .title("Member Banned")
             .description(&response)
@@ -155,7 +155,7 @@ pub async fn kick(
         user.name, user.id, reason
     );
     ctx.say(&response).await?;
-    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation) {
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::Moderation).await {
         let embed = serenity::CreateEmbed::new()
             .title("Member Kicked")
             .description(&response)

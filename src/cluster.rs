@@ -158,7 +158,7 @@ pub async fn handle_cluster_message(
         ClusterMessage::ConfigRequest => {
             let state = cluster_state.lock().await;
             if state.is_leader {
-                let config_str = crate::utils::get_config_as_string()?;
+                let config_str = crate::utils::get_config_as_string().await?;
                 let cluster_channel = ChannelId::new(coordination_channel_id);
                 cluster_channel.send_message(
                     ctx,
@@ -180,7 +180,7 @@ pub async fn handle_cluster_message(
                 return Ok(());
             }
             let _data = data.lock().await;
-            if let Err(e) = update_config_from_str(&config) {
+            if let Err(e) = update_config_from_str(&config).await {
                 println!("Failed to update config: {e}");
             }
         }
