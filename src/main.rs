@@ -287,6 +287,27 @@ async fn main() {
                     cluster_config.cluster.priority,
                     coordination_channel_id,
                 )));
+                println!("Performing startup cleanup of dead react-roles...");
+                let guilds = ctx.cache.guilds();
+                let mut total_pruned = 0;
+                for guild_id in guilds {
+                    match crate::utils::prune_dead_react_roles(&ctx.http, guild_id.into()).await {
+                        Ok(pruned_ids) if !pruned_ids.is_empty() => {
+                            println!("- Pruned {} entry/entries for guild {}", pruned_ids.len(), guild_id);
+                            total_pruned += pruned_ids.len();
+                        },
+                        Err(e) => println!("- Error pruning for guild {}: {}", &guild_id, &e),
+                        _ => {}
+                    }
+                }
+                if total_pruned > 0 {
+                    println!("Total dead react-roles pruned: {}. Saving updated config to disk.", &total_pruned);
+                    if let Err(e) = crate::utils::save_config_to_disk().await {
+                        println!("!! FAILED to save pruned config to disk: {}", &e);
+                    }
+                } else {
+                    println!("No dead react-roles found.");
+                }
                 let data = Data {
                     votes: Arc::new(Mutex::new(HashMap::new())),
                     cluster_state: cluster_state.clone(),

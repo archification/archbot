@@ -248,6 +248,7 @@ pub async fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), 
 
 pub async fn add_react_role(
     guild_id: u64,
+    channel_id: u64,
     message_id: u64,
     emoji: String,
     role_id: u64,
@@ -265,12 +266,18 @@ pub async fn add_react_role(
         .or_insert(Value::Table(toml::value::Table::new()))
         .as_table_mut()
         .expect("react_roles should be a table");
-    let message_mappings = react_roles_table
+    let message_entry = react_roles_table
         .entry(message_id.to_string())
         .or_insert(Value::Table(toml::value::Table::new()))
         .as_table_mut()
-        .expect("message mapping should be a table");
-    message_mappings.insert(emoji, Value::Integer(role_id as i64));
+        .expect("message entry should be a table");
+    message_entry.insert("channel_id".to_owned().to_string(), Value::Integer(channel_id as i64));
+    let roles_map = message_entry
+        .entry("roles".to_owned().to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("roles map should be a table");
+    roles_map.insert(emoji, Value::Integer(role_id as i64));
     Ok(())
 }
 
@@ -280,29 +287,78 @@ pub async fn remove_react_role(
     emoji: &str,
 ) -> Result<Option<u64>, Box<dyn std::error::Error + Send + Sync>> {
     let mut config = CONFIG_CACHE.write().await;
-    if let Some(guild_table) = config.as_table_mut().and_then(|r| r.get_mut(&guild_id.to_string())).and_then(|g| g.as_table_mut()) {
-        if let Some(react_roles_table) = guild_table.get_mut("react_roles").and_then(|rr| rr.as_table_mut()) {
-            if let Some(message_mappings) = react_roles_table.get_mut(&message_id.to_string()).and_then(|m| m.as_table_mut()) {
-                // Remove the key (the emoji) and get its value (the role_id)
-                if let Some(removed_value) = message_mappings.remove(emoji) {
-                    // Successfully removed the mapping. Return the role ID that was removed.
-                    return Ok(removed_value.as_integer().map(|id| id as u64));
-                }
-            }
-        }
+    let guild_table = match config.get_mut(guild_id.to_string()).and_then(|g| g.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(None),
+    };
+    let react_roles_table = match guild_table.get_mut("react_roles").and_then(|rr| rr.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(None),
+    };
+    let message_entry = match react_roles_table.get_mut(&message_id.to_string()).and_then(|m| m.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(None),
+    };
+    let roles_map = match message_entry.get_mut("roles").and_then(|r| r.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(None),
+    };
+    let removed_role_id = roles_map.remove(emoji).and_then(|v| v.as_integer().map(|id| id as u64));
+    if roles_map.is_empty() {
+        react_roles_table.remove(&message_id.to_string());
     }
-    Ok(None)
+    Ok(removed_role_id)
 }
 
 pub async fn get_react_role(guild_id: u64, message_id: u64, emoji: &str) -> Option<u64> {
     let config = CONFIG_CACHE.read().await;
-    config.get(guild_id.to_string())
-        .and_then(|v| v.as_table())
+    config
+        .get(guild_id.to_string())
+        .and_then(|g| g.as_table())
         .and_then(|guild_table| guild_table.get("react_roles"))
-        .and_then(|react_roles| react_roles.as_table())
+        .and_then(|rr| rr.as_table())
         .and_then(|messages| messages.get(&message_id.to_string()))
-        .and_then(|v| v.as_table())
-        .and_then(|emoji_map| emoji_map.get(emoji))
+        .and_then(|entry| entry.as_table())
+        .and_then(|message_entry| message_entry.get("roles"))
+        .and_then(|r| r.as_table())
+        .and_then(|roles_map| roles_map.get(emoji))
         .and_then(|v| v.as_integer())
         .map(|role_id| role_id as u64)
+}
+
+pub async fn prune_dead_react_roles(
+    http: &serenity::Http,
+    guild_id: u64,
+) -> Result<Vec<u64>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut pruned_ids = Vec::new();
+    let mut config = CONFIG_CACHE.write().await;
+
+    let guild_table = match config.get_mut(guild_id.to_string()).and_then(|g| g.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(pruned_ids),
+    };
+    let react_roles_table = match guild_table.get_mut("react_roles").and_then(|rr| rr.as_table_mut()) {
+        Some(table) => table,
+        None => return Ok(pruned_ids),
+    };
+    let mut dead_message_ids = Vec::new();
+    for (message_id_str, entry_value) in react_roles_table.iter() {
+        if let Some(entry_table) = entry_value.as_table() {
+            if let (Some(message_id), Some(channel_id)) = (
+                message_id_str.parse::<u64>().ok(),
+                entry_table.get("channel_id").and_then(|v| v.as_integer()).map(|id| id as u64)
+            ) {
+                let channel = ChannelId::new(channel_id);
+                if channel.message(http, message_id).await.is_err() {
+                    println!("Pruning dead react-role config for message ID: {message_id}");
+                    dead_message_ids.push(message_id_str.clone());
+                    pruned_ids.push(message_id);
+                }
+            }
+        }
+    }
+    for id in dead_message_ids {
+        react_roles_table.remove(&id);
+    }
+    Ok(pruned_ids)
 }

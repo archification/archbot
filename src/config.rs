@@ -27,6 +27,7 @@ use crate::utils::*;
         "set_announcement_channel",
         "reactrole",
         "removereactrole",
+        "cleanreactroles",
     )
 )]
 pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
@@ -439,13 +440,13 @@ pub async fn reactrole(
         ctx.say("❌ Failed to react to the message. Do I have 'Add Reactions' permissions in that channel? Also, ensure the emoji is correct and I have access to it if it's a custom emoji from another server.").await?;
         return Ok(());
     }
-/*
-    if let Err(_) = message.react(&ctx.http(), reaction).await {
-        ctx.say("❌ Failed to react to the message. Do I have 'Add Reactions' permissions in that channel? Also, ensure the emoji is correct and I have access to it if it's a custom emoji from another server.").await?;
-        return Ok(());
-    }
-*/
-    add_react_role(guild_id.into(), message_id_u64, emoji.clone(), role.id.into()).await?;
+    add_react_role(
+        guild_id.into(),
+        channel.id.into(),
+        message_id_u64,
+        emoji.clone(),
+        role.id.into()
+    ).await?;
     ctx.say(format!(
         "✅ React-role configured. Users who react with {} on that message will now get the {} role.",
         emoji,
@@ -494,7 +495,6 @@ pub async fn removereactrole(
     };
     match remove_react_role(guild_id.into(), message_id_u64, &emoji).await? {
         Some(_removed_role_id) => {
-            //let message = channel.id.message(&ctx.http(), message_id_u64).await?;
             let message = match channel.id.message(&ctx.http(), message_id_u64).await {
                 Ok(msg) => msg,
                 Err(_) => {
@@ -502,17 +502,11 @@ pub async fn removereactrole(
                     return Ok(());
                 }
             };
-            /*
-            let reaction_emoji: serenity::ReactionType = poise::serenity_prelude::parse_emoji(emoji.clone())
-                .ok_or("Invalid custom emoji format.")?
-                .into();
-            */
             let reaction_emoji: serenity::ReactionType = match poise::serenity_prelude::parse_emoji(emoji.clone()) {
                 Some(parsed) => parsed.into(),
                 None => serenity::ReactionType::Unicode(emoji.clone()),
             };
             let bot_id = ctx.framework().bot_id;
-            //message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await?;
             let _ = message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await;
             ctx.say(format!("✅ Successfully removed the react-role for {}.", &emoji)).await?;
             let config_str = crate::utils::get_config_as_string().await?;
@@ -525,6 +519,46 @@ pub async fn removereactrole(
         }
         None => {
             ctx.say("❌ That emoji was not configured as a react-role on that message.").await?;
+        }
+    }
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    guild_only
+)]
+pub async fn cleanreactroles(ctx: Context<'_>) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        ctx.say("This command can only be run by the leader instance.").await?;
+        return Ok(());
+    }
+    ctx.defer_ephemeral().await?;
+    let guild_id = ctx.guild_id().ok_or("Not in a guild")?;
+    match prune_dead_react_roles(ctx.http(), guild_id.into()).await {
+        Ok(pruned_ids) => {
+            if pruned_ids.is_empty() {
+                ctx.say("✅ No dead react-role configurations found.").await?;
+            } else {
+                let ids_str = pruned_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", ");
+                ctx.say(format!("🧹 Cleaned up {} dead react-role configuration(s) for message(s): {}", pruned_ids.len(), ids_str)).await?;
+                save_config_to_disk().await?;
+                let coordination_channel_id = cluster_state.coordination_channel_id;
+                let config_str = crate::utils::get_config_as_string().await?;
+                let cluster_channel = ChannelId::new(coordination_channel_id);
+                cluster_channel.send_message(
+                    &ctx.http(),
+                    serenity::CreateMessage::new()
+                        .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+                ).await?;
+            }
+        },
+        Err(e) => {
+            ctx.say(format!("❌ An error occurred while cleaning config: {}", &e)).await?;
         }
     }
     Ok(())
