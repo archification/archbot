@@ -494,12 +494,26 @@ pub async fn removereactrole(
     };
     match remove_react_role(guild_id.into(), message_id_u64, &emoji).await? {
         Some(_removed_role_id) => {
-            let message = channel.id.message(&ctx.http(), message_id_u64).await?;
+            //let message = channel.id.message(&ctx.http(), message_id_u64).await?;
+            let message = match channel.id.message(&ctx.http(), message_id_u64).await {
+                Ok(msg) => msg,
+                Err(_) => {
+                    ctx.say("❌ Could not find the specified message in that channel.").await?;
+                    return Ok(());
+                }
+            };
+            /*
             let reaction_emoji: serenity::ReactionType = poise::serenity_prelude::parse_emoji(emoji.clone())
                 .ok_or("Invalid custom emoji format.")?
                 .into();
+            */
+            let reaction_emoji: serenity::ReactionType = match poise::serenity_prelude::parse_emoji(emoji.clone()) {
+                Some(parsed) => parsed.into(),
+                None => serenity::ReactionType::Unicode(emoji.clone()),
+            };
             let bot_id = ctx.framework().bot_id;
-            message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await?;
+            //message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await?;
+            let _ = message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await;
             ctx.say(format!("✅ Successfully removed the react-role for {}.", &emoji)).await?;
             let config_str = crate::utils::get_config_as_string().await?;
             let cluster_channel = ChannelId::new(coordination_channel_id);
