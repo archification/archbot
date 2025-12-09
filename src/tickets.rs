@@ -6,6 +6,67 @@ use poise::serenity_prelude::Mentionable;
 
 use crate::utils::*;
 
+pub async fn close_ticket_routine(
+    ctx: &serenity::Context,
+    guild_id: serenity::GuildId,
+    channel_id: serenity::ChannelId,
+    channel_name: String,
+    reason: String,
+    closer_name: String,
+    closer_id: Option<serenity::UserId>,
+) -> Result<(), Error> {
+    let embed = CreateEmbed::new()
+        .title("Ticket Closed")
+        .description(&reason)
+        .field("Closed By", closer_name.clone(), true)
+        .field("Closed At", format!("<t:{}:F>", chrono::Utc::now().timestamp()), true)
+        .color(serenity::Colour::DARK_RED);
+    let _ = channel_id.send_message(&ctx.http, CreateMessage::new().embed(embed)).await;
+    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
+        let mut log_embed = CreateEmbed::new()
+            .title("Ticket Closed")
+            .description(format!("[Original Ticket]({})", channel_id.mention()))
+            .field("Ticket Name", &channel_name, true)
+            .field("Closed By", format!("{} ({})", closer_name, closer_id.map(|id| id.to_string()).unwrap_or_else(|| "System".to_string())), true)
+            .field("Reason", &reason, false)
+            .color(serenity::Colour::DARK_RED);
+        if closer_id.is_none() {
+             log_embed = log_embed.footer(serenity::CreateEmbedFooter::new("Auto-closed on member leave"));
+        }
+        log_channel.send_message(
+            &ctx.http,
+            CreateMessage::new()
+                .content("📪 Ticket closed")
+                .embed(log_embed)
+        ).await?;
+    }
+    if closer_id.is_some() {
+         // Only say this if a user ran the command, otherwise it looks weird for the bot to talk to itself
+         // Or purely rely on the embed above.
+    }
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    match channel_id.delete(&ctx.http).await {
+        Ok(_) => {
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
+                log_channel.say(
+                    &ctx.http,
+                    format!("✅ Successfully deleted ticket channel: `{channel_name}`")
+                ).await?;
+            }
+        }
+        Err(e) => {
+            println!("Failed to delete ticket channel: {e}");
+            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
+                log_channel.say(
+                    &ctx.http,
+                    format!("⚠️ Failed to delete ticket channel `{channel_name}`: {e}")
+                ).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[poise::command(
     slash_command,
     prefix_command,
@@ -122,16 +183,16 @@ pub async fn closeticket(
         return Ok(());
     }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let channel = ctx.channel_id();
+    let channel_id = ctx.channel_id();
     let closer = ctx.author();
-    let channel_info = channel.to_channel(&ctx.http()).await?;
+    let channel_info = channel_id.to_channel(&ctx.http()).await?;
     let channel_name = match &channel_info {
         serenity::Channel::Guild(guild_channel) => {
             if !guild_channel.name.starts_with("ticket-") {
                 ctx.say("❌ This command can only be used in ticket channels").await?;
                 return Ok(());
             }
-            &guild_channel.name
+            guild_channel.name.clone()
         }
         _ => {
             ctx.say("❌ This command can only be used in server channels").await?;
@@ -139,48 +200,15 @@ pub async fn closeticket(
         }
     };
     let reason = reason.unwrap_or_else(|| "No reason provided".to_string());
-    let embed = CreateEmbed::new()
-        .title("Ticket Closed")
-        .description(&reason)
-        .field("Closed By", closer.mention().to_string(), true)
-        .field("Closed At", format!("<t:{}:F>", chrono::Utc::now().timestamp()), true)
-        .color(serenity::Colour::DARK_RED);
-    channel.send_message(&ctx.http(), CreateMessage::new().embed(embed)).await?;
-    if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
-        let log_embed = CreateEmbed::new()
-            .title("Ticket Closed")
-            .description(format!("[Original Ticket]({})", channel.mention()))
-            .field("Ticket Name", channel_name, true)
-            .field("Closed By", format!("{} ({})", closer.tag(), closer.id), true)
-            .field("Reason", &reason, false)
-            .color(serenity::Colour::DARK_RED);
-        log_channel.send_message(
-            &ctx.http(),
-            CreateMessage::new()
-                .content("📪 Ticket closed")
-                .embed(log_embed)
-        ).await?;
-    }
     ctx.say("🗑 Closing this ticket in 5 seconds...").await?;
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    match channel.delete(&ctx.http()).await {
-        Ok(_) => {
-            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
-                log_channel.say(
-                    &ctx.http(),
-                    format!("✅ Successfully deleted ticket channel: `{channel_name}`")
-                ).await?;
-            }
-        }
-        Err(e) => {
-            println!("Failed to delete ticket channel: {e}");
-            if let Some(log_channel) = get_logging_channel(guild_id.into(), LogEventType::TicketActivity).await {
-                log_channel.say(
-                    &ctx.http(),
-                    format!("⚠️ Failed to delete ticket channel `{channel_name}`: {e}")
-                ).await?;
-            }
-        }
-    }
+    close_ticket_routine(
+        ctx.serenity_context(),
+        guild_id,
+        channel_id,
+        channel_name,
+        reason,
+        closer.tag(),
+        Some(closer.id),
+    ).await?;
     Ok(())
 }

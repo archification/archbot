@@ -134,6 +134,35 @@ async fn event_handler(
         },
         serenity::FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
             let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
+            if is_leader {
+                if let Ok(channels) = guild_id.channels(&ctx.http).await {
+                    for (channel_id, channel) in channels {
+                        if channel.name.starts_with("ticket-") {
+                            let is_ticket_owner = channel.permission_overwrites.iter().any(|overwrite| {
+                                overwrite.kind == serenity::PermissionOverwriteType::Member(user.id)
+                            });
+                            if is_ticket_owner {
+                                let ctx_clone = ctx.clone();
+                                let user_clone = user.clone();
+                                let channel_name = channel.name.clone();
+                                let guild_id_obj = *guild_id;
+                                tokio::spawn(async move {
+                                    println!("Auto-closing ticket {} because owner {} left", channel_name, user_clone.tag());
+                                    let _ = crate::tickets::close_ticket_routine(
+                                        &ctx_clone,
+                                        guild_id_obj,
+                                        channel_id,
+                                        channel_name,
+                                        "Ticket owner left the server".to_string(),
+                                        "Automated System".to_string(),
+                                        None
+                                    ).await;
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             if let Some(log_channel) = crate::utils::get_logging_channel(
                 guild_id_u64,
                 crate::utils::LogEventType::MemberJoinLeave
