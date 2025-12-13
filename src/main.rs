@@ -136,11 +136,16 @@ async fn event_handler(
             let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
             if is_leader {
                 if let Ok(channels) = guild_id.channels(&ctx.http).await {
+                    let slug = user.name.to_lowercase().replace(' ', "-");
+                    let prefix = format!("ticket-{}-", slug);
                     for (channel_id, channel) in channels {
-                        if channel.name.starts_with("ticket-") {
-                            let is_ticket_owner = channel.permission_overwrites.iter().any(|overwrite| {
-                                overwrite.kind == serenity::PermissionOverwriteType::Member(user.id)
-                            });
+                        if channel.name.starts_with(&prefix) {
+                            let is_ticket_owner = if channel.name.starts_with(&prefix) {
+                                let remainder = &channel.name[prefix.len()..];
+                                remainder.len() == 15 && remainder.chars().all(|c| c.is_ascii_digit() || c == '-')
+                            } else {
+                                false
+                            };
                             if is_ticket_owner {
                                 let ctx_clone = ctx.clone();
                                 let user_clone = user.clone();
