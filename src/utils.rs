@@ -414,3 +414,54 @@ pub async fn get_custom_stats(guild_id: u64) -> Vec<String> {
     }
     Vec::new()
 }
+
+pub async fn add_countdown_ending(guild_id: u64, name: &str, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    let endings = guild_table
+        .entry("countdown_endings".to_owned())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("countdown_endings should be a table");
+    endings.insert(name.to_lowercase(), Value::String(message.to_string()));
+    Ok(())
+}
+
+pub async fn remove_countdown_ending(guild_id: u64, name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    if let Some(guild_table) = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .get_mut(&guild_id.to_string())
+        .and_then(|v| v.as_table_mut())
+    {
+        if let Some(endings) = guild_table
+            .get_mut("countdown_endings")
+            .and_then(|v| v.as_table_mut())
+        {
+            endings.remove(&name.to_lowercase());
+        }
+    }
+    Ok(())
+}
+
+pub async fn get_countdown_endings(guild_id: u64) -> HashMap<String, String> {
+    let config = CONFIG_CACHE.read().await;
+    let mut result = HashMap::new();
+    if let Some(guild_table) = config.get(guild_id.to_string()).and_then(|v| v.as_table()) {
+        if let Some(endings) = guild_table.get("countdown_endings").and_then(|v| v.as_table()) {
+            for (k, v) in endings {
+                if let Some(s) = v.as_str() {
+                    result.insert(k.clone(), s.to_string());
+                }
+            }
+        }
+    }
+    result
+}

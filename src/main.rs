@@ -299,6 +299,7 @@ async fn main() {
             commands::vote(),
             commands::getvotes(),
             commands::diceroll(),
+            commands::countdown(),
             config::config(),
             tickets::ticket(),
             tickets::closeticket(),

@@ -2,6 +2,7 @@ use crate::{Context, Error};
 use poise::serenity_prelude::{self as serenity, Mentionable};
 use crate::utils::{get_logging_channel, LogEventType};
 use rand::Rng;
+use rand::seq::IndexedRandom;
 
 #[poise::command(
     prefix_command,
@@ -265,4 +266,76 @@ fn parse_dice_expression(input: &str) -> (&str, Option<Vec<Operator>>) {
         }
     }
     (dice_part, if operators.is_empty() { None } else { Some(operators) })
+}
+
+#[derive(poise::ChoiceParameter)]
+pub enum Difficulty {
+    Easy,
+    Medium,
+    Hard,
+}
+
+#[poise::command(slash_command, prefix_command, category = "Fun")]
+pub async fn countdown(
+    ctx: Context<'_>,
+    #[description = "Starting number (default 10)"] start: Option<u32>,
+    #[description = "Difficulty (easy, medium, hard)"] difficulty: Option<Difficulty>,
+    #[description = "Ending name (or 'random')"] ending: Option<String>,
+) -> Result<(), Error> {
+    let start_val = start.unwrap_or(10);
+    if start_val == 0 || start_val > 100 {
+        ctx.say("❌ Starting number must be between 1 and 100.").await?;
+        return Ok(());
+    }
+    let diff = difficulty.unwrap_or(Difficulty::Easy);
+    let max_chance = match diff {
+        Difficulty::Easy => 0.0,
+        Difficulty::Medium => 0.25,
+        Difficulty::Hard => 0.50,
+    };
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let endings = crate::utils::get_countdown_endings(guild_id.into()).await;
+    let final_message = if let Some(ref end_name) = ending {
+        if end_name.to_lowercase() == "random" && !endings.is_empty() {
+            let mut rng = rand::rng();
+            let values: Vec<&String> = endings.values().collect();
+            values.choose(&mut rng).map(|s| s.to_string()).unwrap_or_else(|| "0".to_string())
+        } else if let Some(msg) = endings.get(&end_name.to_lowercase()) {
+            msg.clone()
+        } else {
+            "0".to_string()
+        }
+    } else {
+        "0".to_string()
+    };
+    let mut current = start_val as i32;
+    let msg = ctx.say(format!("⏱️ {}", current)).await?;
+    while current > 0 {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let progress = if current <= start_val as i32 {
+            (start_val as f32 - current as f32) / (start_val as f32)
+        } else {
+            0.0
+        };
+        let chance_to_go_up = max_chance * progress;
+        let roll: f32 = {
+            let mut rng = rand::rng();
+            rng.random()
+        };
+        if roll < chance_to_go_up {
+            current += 1;
+        } else {
+            current -= 1;
+        }
+        let content_to_send = if current == 0 {
+            final_message.clone()
+        } else {
+            format!("⏱️ {}", current)
+        };
+        if let Err(e) = msg.edit(ctx, poise::CreateReply::default().content(content_to_send)).await {
+            println!("Failed to edit countdown message: {}", e);
+            break;
+        }
+    }
+    Ok(())
 }

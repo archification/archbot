@@ -30,6 +30,9 @@ use crate::utils::*;
         "cleanreactroles",
         "add_stat",
         "remove_stat",
+        "add_ending",
+        "remove_ending",
+        "list_endings",
     )
 )]
 pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
@@ -608,5 +611,68 @@ pub async fn remove_stat(
     crate::utils::remove_custom_stat(guild_id.into(), &stat_name).await?;
     crate::utils::save_config_to_disk().await?;
     ctx.say(format!("🗑️ Removed custom stat tracker: `{}`", stat_name)).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn add_ending(
+    ctx: Context<'_>,
+    #[description = "Name of the ending"] name: String,
+    #[description = "Message for the ending"] message: String,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::add_countdown_ending(guild_id.into(), &name, &message).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("✅ Added countdown ending `{}`", name)).await?;
+    let config_str = crate::utils::get_config_as_string().await?;
+    let cluster_channel = ChannelId::new(coordination_channel_id);
+    cluster_channel.send_message(
+        &ctx.http(),
+        serenity::CreateMessage::new()
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+    ).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn remove_ending(
+    ctx: Context<'_>,
+    #[description = "Name of the ending to remove"] name: String,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::remove_countdown_ending(guild_id.into(), &name).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("🗑️ Removed countdown ending `{}`", name)).await?;
+    let config_str = crate::utils::get_config_as_string().await?;
+    let cluster_channel = ChannelId::new(coordination_channel_id);
+    cluster_channel.send_message(
+        &ctx.http(),
+        serenity::CreateMessage::new()
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+    ).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn list_endings(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let endings = crate::utils::get_countdown_endings(guild_id.into()).await;
+    if endings.is_empty() {
+        ctx.say("No countdown endings configured.").await?;
+    } else {
+        let mut response = String::from("⏱️ **Configured Countdown Endings:**\n");
+        for (name, msg) in endings {
+            response.push_str(&format!("- **{}**: {}\n", name, msg));
+        }
+        ctx.say(response).await?;
+    }
     Ok(())
 }
