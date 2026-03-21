@@ -6,9 +6,20 @@ use crate::utils::*;
 
 #[poise::command(
     prefix_command,
-/*
-    slash_command,
-*/
+    owners_only,
+    hide_in_help
+)]
+pub async fn register(ctx: Context<'_>) -> Result<(), Error> {
+let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    ctx.say("⏳ Syncing commands to this server...").await?;
+    let commands = &ctx.framework().options().commands;
+    poise::builtins::register_in_guild(ctx, commands, guild_id).await?;
+    ctx.say("✅ Commands have been instantly synced to this server!").await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
     owners_only,
     hide_in_help
 )]
@@ -126,7 +137,6 @@ pub async fn ban(
             serenity::CreateMessage::new().embed(embed)
         ).await?;
     }
-
     Ok(())
 }
 

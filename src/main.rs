@@ -6,6 +6,7 @@ mod utils;
 mod config;
 mod tickets;
 mod staff;
+mod stats;
 
 use poise::serenity_prelude as serenity;
 use poise::serenity_prelude::ChannelId;
@@ -105,6 +106,30 @@ async fn event_handler(
         }
         serenity::FullEvent::Message { new_message } => {
             cluster::handle_cluster_message(ctx, new_message, data.cluster_state.clone(), Arc::new(Mutex::new(data.clone()))).await?;
+            if let Some(guild_id) = new_message.guild_id {
+                let prefix = "~";
+                if new_message.content.starts_with(prefix) && !new_message.author.bot {
+                    let content = &new_message.content[prefix.len()..];
+                    let mut parts = content.split_whitespace();
+                    if let Some(cmd_name) = parts.next() {
+                        let cmd_lower = cmd_name.to_lowercase();
+                        let allowed_stats = crate::utils::get_custom_stats(guild_id.into()).await;
+                        if allowed_stats.contains(&cmd_lower) {
+                            let amount = parts.next()
+                                .and_then(|s| s.parse::<i64>().ok())
+                                .unwrap_or(1);
+                            match crate::stats::modify_user_stat(guild_id.into(), new_message.author.id.into(), &cmd_lower, amount).await {
+                                Ok(new_total) => {
+                                    let _ = new_message.reply(&ctx.http, format!("📈 Added {} to your `{}` stat! New total: **{}**", amount, cmd_lower, new_total)).await;
+                                }
+                                Err(e) => {
+                                    println!("Failed to modify stat: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         serenity::FullEvent::GuildMemberAddition { new_member } => {
             let guild_id = new_member.guild_id;
@@ -136,29 +161,35 @@ async fn event_handler(
             let guild_id_u64 = <poise::serenity_prelude::GuildId as std::convert::Into<u64>>::into(*guild_id);
             if is_leader {
                 if let Ok(channels) = guild_id.channels(&ctx.http).await {
-                    let slug = user.name.to_lowercase().replace(' ', "-");
-                    let prefix = format!("ticket-{}-", slug);
                     for (channel_id, channel) in channels {
-                        if channel.name.starts_with(&prefix) {
-                            let is_ticket_owner = if channel.name.starts_with(&prefix) {
-                                let remainder = &channel.name[prefix.len()..];
-                                remainder.len() == 15 && remainder.chars().all(|c| c.is_ascii_digit() || c == '-')
-                            } else {
-                                false
-                            };
+                        if channel.name.starts_with("ticket-") {
+                            let mut is_ticket_owner = false;
+                            if let Some(topic) = &channel.topic {
+                                if topic.contains(&user.id.to_string()) {
+                                    is_ticket_owner = true;
+                                }
+                            }
+                            for overwrite in &channel.permission_overwrites {
+                                if let serenity::PermissionOverwriteType::Member(user_id) = overwrite.kind {
+                                    if user_id == user.id && overwrite.allow.contains(serenity::Permissions::VIEW_CHANNEL) {
+                                        is_ticket_owner = true;
+                                        break;
+                                    }
+                                }
+                            }
                             if is_ticket_owner {
                                 let ctx_clone = ctx.clone();
                                 let user_clone = user.clone();
                                 let channel_name = channel.name.clone();
                                 let guild_id_obj = *guild_id;
                                 tokio::spawn(async move {
-                                    println!("Auto-closing ticket {} because owner {} left", channel_name, user_clone.tag());
+                                    println!("Auto-closing ticket {} because owner {} ({}) left", channel_name, user_clone.tag(), user_clone.id);
                                     let _ = crate::tickets::close_ticket_routine(
                                         &ctx_clone,
                                         guild_id_obj,
                                         channel_id,
                                         channel_name,
-                                        "Ticket owner left the server".to_string(),
+                                        "Ticket owner left the server (verified via permission scan)".to_string(),
                                         "Automated System".to_string(),
                                         None
                                     ).await;
@@ -258,6 +289,7 @@ async fn main() {
         .expect("Missing coordination channel ID. Please set either COORDINATION_CHANNEL_ID environment variable or use --coordination argument");
     let options = poise::FrameworkOptions {
         commands: vec![
+            staff::register(),
             staff::quit(),
             staff::writeconfig(),
             staff::ban(),
@@ -270,6 +302,9 @@ async fn main() {
             config::config(),
             tickets::ticket(),
             tickets::closeticket(),
+            tickets::scantickets(),
+            stats::stat(),
+            stats::viewstat(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),

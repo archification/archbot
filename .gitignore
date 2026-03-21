@@ -1,5 +1,6 @@
 debug/
 target/
+user_stats/
 **/*.rs.bk
 config.toml
 run.sh

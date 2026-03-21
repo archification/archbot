@@ -28,6 +28,8 @@ use crate::utils::*;
         "reactrole",
         "removereactrole",
         "cleanreactroles",
+        "add_stat",
+        "remove_stat",
     )
 )]
 pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
@@ -561,5 +563,50 @@ pub async fn cleanreactroles(ctx: Context<'_>) -> Result<(), Error> {
             ctx.say(format!("❌ An error occurred while cleaning config: {}", &e)).await?;
         }
     }
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    guild_only
+)]
+pub async fn add_stat(
+    ctx: Context<'_>,
+    #[description = "Name of the stat to track (e.g., 'solves')"] stat_name: String,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let clean_name: String = stat_name.chars().filter(|c| c.is_alphanumeric()).collect();
+    if clean_name.is_empty() {
+        ctx.say("Stat names must contain alphanumeric characters.").await?;
+        return Ok(());
+    }
+    crate::utils::add_custom_stat(guild_id.into(), &clean_name).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("✅ Added custom stat tracker: `{}`", clean_name)).await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    guild_only
+)]
+pub async fn remove_stat(
+    ctx: Context<'_>,
+    #[description = "Name of the stat to remove"] stat_name: String,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::remove_custom_stat(guild_id.into(), &stat_name).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("🗑️ Removed custom stat tracker: `{}`", stat_name)).await?;
     Ok(())
 }

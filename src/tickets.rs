@@ -115,13 +115,19 @@ pub async fn ticket(
             kind: PermissionOverwriteType::Role(serenity::RoleId::new(role_id)),
         });
     }
-    let channel = guild_id.create_channel(&ctx.http(),
+    let channel = match guild_id.create_channel(&ctx.http(),
         CreateChannel::new(&channel_name)
             .kind(serenity::ChannelType::Text)
             .category(category_id)
-            .topic(&issue_description)
+            .topic(format!("Ticket Owner ID: {} | Issue: {}", author.id, issue_description))
             .permissions(permissions)
-    ).await?;
+    ).await {
+        Ok(c) => c,
+        Err(e) => {
+            println!("CRITICAL: Failed to create ticket channel with topic: {:?}", e);
+            return Err(e.into());
+        }
+    };
     channel.say(&ctx.http(), format!("{} created this ticket", author.mention())).await?;
     let show_message = match get_ticket_exempt_role(guild_id.into()).await {
         Some(exempt_role_id) => {
@@ -210,5 +216,55 @@ pub async fn closeticket(
         closer.tag(),
         Some(closer.id),
     ).await?;
+    Ok(())
+}
+
+#[poise::command(
+    prefix_command,
+    slash_command,
+    required_permissions = "ADMINISTRATOR",
+    category = "Moderation",
+    guild_only
+)]
+pub async fn scantickets(ctx: Context<'_>) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader {
+        return Ok(());
+    }
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    let channels = guild_id.channels(&ctx.http()).await?;
+    let mut closed_count = 0;
+    ctx.say("🔍 Scanning for abandoned tickets...").await?;
+    for (channel_id, channel) in channels {
+        if channel.name.starts_with("ticket-") {
+            let mut abandoned = false;
+            let mut found_owner_in_perms = false;
+            for overwrite in &channel.permission_overwrites {
+                if let serenity::PermissionOverwriteType::Member(user_id) = overwrite.kind {
+                    if overwrite.allow.contains(serenity::Permissions::VIEW_CHANNEL) {
+                        found_owner_in_perms = true;
+                        if guild_id.member(&ctx.http(), user_id).await.is_err() {
+                            abandoned = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if abandoned || (channel.name.starts_with("ticket-") && !found_owner_in_perms) {
+                let _ = close_ticket_routine(
+                    ctx.serenity_context(),
+                    guild_id,
+                    channel_id,
+                    channel.name.clone(),
+                    "Owner not found in server members (Permission Scan)".to_string(),
+                    "System Scan".to_string(),
+                    None
+                ).await;
+                closed_count += 1;
+            }
+        }
+    }
+    ctx.say(format!("✅ Scan complete. Closed **{}** abandoned tickets.", closed_count)).await?;
     Ok(())
 }

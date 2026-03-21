@@ -362,3 +362,55 @@ pub async fn prune_dead_react_roles(
     }
     Ok(pruned_ids)
 }
+
+pub async fn add_custom_stat(guild_id: u64, stat_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    let stats = guild_table
+        .entry("custom_stats")
+        .or_insert(Value::Array(Vec::new()))
+        .as_array_mut()
+        .expect("custom_stats should be an array");
+        
+    if !stats.iter().any(|v| v.as_str() == Some(stat_name)) {
+        stats.push(Value::String(stat_name.to_lowercase()));
+    }
+    Ok(())
+}
+
+pub async fn remove_custom_stat(guild_id: u64, stat_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    if let Some(guild_table) = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .get_mut(&guild_id.to_string())
+        .and_then(|v| v.as_table_mut())
+    {
+        if let Some(stats) = guild_table
+            .get_mut("custom_stats")
+            .and_then(|v| v.as_array_mut())
+        {
+            let stat_lower = stat_name.to_lowercase();
+            stats.retain(|v| v.as_str() != Some(&stat_lower));
+        }
+    }
+    Ok(())
+}
+
+pub async fn get_custom_stats(guild_id: u64) -> Vec<String> {
+    let config = CONFIG_CACHE.read().await;
+    if let Some(guild_table) = config.get(guild_id.to_string()).and_then(|v| v.as_table()) {
+        if let Some(stats) = guild_table.get("custom_stats").and_then(|v| v.as_array()) {
+            return stats.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+        }
+    }
+    Vec::new()
+}
