@@ -6,7 +6,6 @@ use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
-use crate::utils::update_config_from_str;
 
 const HEARTBEAT_INTERVAL: u64 = 10;
 const LEADER_TIMEOUT: u64 = 60;
@@ -22,7 +21,7 @@ pub struct InstanceInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClusterMessage {
     Heartbeat(InstanceInfo),
-    ConfigUpdate(String),
+    ConfigUpdate,
     LeaderAnnouncement(String),
     TicketTemplateUpdate {
         guild_id: u64,
@@ -141,7 +140,6 @@ pub async fn handle_cluster_message(
     ctx: &serenity::Context,
     message: &serenity::Message,
     cluster_state: Arc<Mutex<ClusterState>>,
-    data: Arc<Mutex<crate::Data>>,
 ) -> Result<(), Error> {
     let coordination_channel_id = {
         let state = cluster_state.lock().await;
@@ -160,6 +158,13 @@ pub async fn handle_cluster_message(
             if state.is_leader {
                 let config_str = crate::utils::get_config_as_string().await?;
                 let cluster_channel = ChannelId::new(coordination_channel_id);
+                cluster_channel.send_files(
+                    &ctx.http,
+                    vec![serenity::CreateAttachment::bytes(config_str.as_bytes(), "config.toml")],
+                    serenity::CreateMessage::new().content("CONFIG_UPDATE_SIGNAL")
+                ).await?;
+                /*
+                let cluster_channel = ChannelId::new(coordination_channel_id);
                 cluster_channel.send_message(
                     ctx,
                     serenity::CreateMessage::new()
@@ -167,6 +172,7 @@ pub async fn handle_cluster_message(
                             &ClusterMessage::ConfigUpdate(config_str)
                         )?)
                 ).await?;
+                */
             }
         }
         ClusterMessage::Heartbeat(info) => {
@@ -174,16 +180,24 @@ pub async fn handle_cluster_message(
             state.update_instance(info);
             state.check_leader();
         }
-        ClusterMessage::ConfigUpdate(config) => {
+        ClusterMessage::ConfigUpdate => {
             let state = cluster_state.lock().await;
             if state.is_leader {
                 return Ok(());
             }
-            let _data = data.lock().await;
-            if let Err(e) = update_config_from_str(&config).await {
-                println!("Failed to update config: {e}");
+            if let Some(attachment) = message.attachments.first() {
+                match attachment.download().await {
+                    Ok(bytes) => {
+                        if let Ok(config_str) = String::from_utf8(bytes) {
+                            crate::utils::update_config_from_str(&config_str).await?;
+                            crate::utils::save_config_to_disk().await?;
+                            println!("Successfully synced config via attachment.");
+                        }
+                    },
+                    Err(e) => println!("Failed to download config attachment: {e}"),
+                }
             }
-        }
+        },
         ClusterMessage::LeaderAnnouncement(instance_id) => {
             let mut state = cluster_state.lock().await;
             if let Some(info) = state.instances.get_mut(&instance_id) {

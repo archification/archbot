@@ -105,7 +105,7 @@ async fn event_handler(
             }
         }
         serenity::FullEvent::Message { new_message } => {
-            cluster::handle_cluster_message(ctx, new_message, data.cluster_state.clone(), Arc::new(Mutex::new(data.clone()))).await?;
+            cluster::handle_cluster_message(ctx, new_message, data.cluster_state.clone()).await?;
             if let Some(guild_id) = new_message.guild_id {
                 let prefix = "~";
                 if new_message.content.starts_with(prefix) && !new_message.author.bot {
@@ -300,6 +300,8 @@ async fn main() {
             commands::getvotes(),
             commands::diceroll(),
             commands::countdown(),
+            commands::reddit(),
+            commands::tumblr(),
             config::config(),
             tickets::ticket(),
             tickets::closeticket(),

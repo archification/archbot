@@ -80,12 +80,11 @@ pub async fn set_log_channel(
     };
     let _ = set_specific_logging_channel(guild_id.into(), channel_key, channel.id.into()).await;
     ctx.say(format!("Updated {} channel to {}", channel_key, channel.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -109,12 +108,11 @@ pub async fn set_announcement_channel(
         channel.id.into()
     ).await;
     ctx.say(format!("📢 Announcements will now be sent to {}", channel.mention())).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -138,12 +136,11 @@ pub async fn set_ticket_log_channel(
         channel.id.into()
     ).await;
     ctx.say(format!("Updated ticket log channel to {}", channel.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -167,12 +164,11 @@ pub async fn set_member_log_channel(
         channel.id.into()
     ).await;
     ctx.say(format!("Updated member log channel to {}", channel.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -191,12 +187,11 @@ pub async fn log_channel(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let _ = set_logging_channel(guild_id.into(), channel.id.into()).await;
     ctx.say(format!("Updated logging channel to {}", channel.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -221,12 +216,11 @@ pub async fn ticket_category(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let _ = set_ticket_category(guild_id.into(), channel.id.into()).await;
     ctx.say(format!("Updated ticket category to {}", channel.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -245,12 +239,11 @@ pub async fn add_ticket_role(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let _ = add_ticrole(guild_id.into(), role.id.into()).await;
     ctx.say(format!("Added {} to ticket access roles", role.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -269,12 +262,11 @@ pub async fn remove_ticket_role(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let _ = remove_ticrole(guild_id.into(), role.id.into()).await;
     ctx.say(format!("Removed {} from ticket access roles", role.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -332,12 +324,11 @@ pub async fn ticket_exempt_role(
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let _ = set_ticket_exempt_role(guild_id.into(), role.id.into()).await;
     ctx.say(format!("Set {} as the ticket exempt role", role.name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -366,12 +357,11 @@ pub async fn remove_ticket_exempt_role(
     let new_toml = toml::to_string_pretty(&value)?;
     fs::write(CONFIG_PATH, new_toml)?;
     ctx.say("Removed ticket exempt role").await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -457,12 +447,11 @@ pub async fn reactrole(
         emoji,
         role.name
     )).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -514,12 +503,11 @@ pub async fn removereactrole(
             let bot_id = ctx.framework().bot_id;
             let _ = message.delete_reaction(&ctx.http(), Some(bot_id), reaction_emoji).await;
             ctx.say(format!("✅ Successfully removed the react-role for {}.", &emoji)).await?;
-            let config_str = crate::utils::get_config_as_string().await?;
             let cluster_channel = ChannelId::new(coordination_channel_id);
             cluster_channel.send_message(
                 &ctx.http(),
                 serenity::CreateMessage::new()
-                    .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+                    .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
             ).await?;
         }
         None => {
@@ -553,12 +541,11 @@ pub async fn cleanreactroles(ctx: Context<'_>) -> Result<(), Error> {
                 ctx.say(format!("🧹 Cleaned up {} dead react-role configuration(s) for message(s): {}", pruned_ids.len(), ids_str)).await?;
                 save_config_to_disk().await?;
                 let coordination_channel_id = cluster_state.coordination_channel_id;
-                let config_str = crate::utils::get_config_as_string().await?;
                 let cluster_channel = ChannelId::new(coordination_channel_id);
                 cluster_channel.send_message(
                     &ctx.http(),
                     serenity::CreateMessage::new()
-                        .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+                        .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
                 ).await?;
             }
         },
@@ -628,12 +615,11 @@ pub async fn add_ending(
     crate::utils::add_countdown_ending(guild_id.into(), &name, &message).await?;
     crate::utils::save_config_to_disk().await?;
     ctx.say(format!("✅ Added countdown ending `{}`", name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }
@@ -651,12 +637,11 @@ pub async fn remove_ending(
     crate::utils::remove_countdown_ending(guild_id.into(), &name).await?;
     crate::utils::save_config_to_disk().await?;
     ctx.say(format!("🗑️ Removed countdown ending `{}`", name)).await?;
-    let config_str = crate::utils::get_config_as_string().await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
         serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate(config_str))?)
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
     Ok(())
 }

@@ -3,6 +3,8 @@ use poise::serenity_prelude::{self as serenity, Mentionable};
 use crate::utils::{get_logging_channel, LogEventType};
 use rand::Rng;
 use rand::seq::IndexedRandom;
+use serde_json::Value;
+use std::env;
 
 #[poise::command(
     prefix_command,
@@ -336,6 +338,187 @@ pub async fn countdown(
             println!("Failed to edit countdown message: {}", e);
             break;
         }
+    }
+    Ok(())
+}
+
+#[poise::command(
+    slash_command,
+    prefix_command,
+    category = "Fun",
+    nsfw_only
+)]
+pub async fn reddit(
+    ctx: Context<'_>,
+    #[description = "Subreddit to fetch from"] subreddit: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+    let url = format!("https://www.reddit.com/r/{}/random.json", subreddit);
+    let client = reqwest::Client::builder()
+        .user_agent("windows:archbot:v0.1.0 (by /u/archification)")
+        .build()?;
+    let response = client.get(&url).send().await?;
+    if response.status().is_success() {
+        let json: Value = response.json().await?;
+        if let Some(image_url) = json[0]["data"]["children"][0]["data"]["url"].as_str() {
+            if image_url.ends_with(".jpg") || image_url.ends_with(".png") || image_url.ends_with(".gif") {
+                let embed = serenity::CreateEmbed::new()
+                    .title(format!("Random image from r/{}", subreddit))
+                    .url(image_url)
+                    .image(image_url)
+                    .color(serenity::Colour::BLURPLE);
+                ctx.send(poise::CreateReply::default().embed(embed)).await?;
+                return Ok(());
+            } else {
+                ctx.say(format!("Found a post, but it wasn't a direct image link: {}", image_url)).await?;
+                return Ok(());
+            }
+        }
+        ctx.say("Could not find a valid image in that subreddit. Try again!").await?;
+    } else {
+        ctx.say(format!("Failed to fetch from Reddit. Status: {}", response.status())).await?;
+    }
+    Ok(())
+}
+
+/*
+#[poise::command(
+    slash_command, 
+    prefix_command, 
+    category = "Fun",
+    nsfw_only 
+)]
+pub async fn tumblr(
+    ctx: Context<'_>,
+    #[description = "Tag to search for"] tag: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+    let api_key = match env::var("TUMBLR_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            ctx.say("❌ The bot owner hasn't configured the Tumblr API key yet!").await?;
+            return Ok(());
+        }
+    };
+    let blog_identifier = if blog.contains(".tumblr.com") {
+        blog.clone()
+    } else {
+        format!("{}.tumblr.com", blog)
+    };
+    let url = format!("https://api.tumblr.com/v2/tagged?tag={}&api_key={}", tag, api_key);
+    let response = reqwest::get(&url).await?;
+    if response.status().is_success() {
+        let json: Value = response.json().await?;
+        if let Some(posts) = json["response"].as_array() {
+            let photo_posts: Vec<&Value> = posts.iter()
+                .filter(|p| p["type"] == "photo")
+                .collect();
+            if !photo_posts.is_empty() {
+                let image_url = {
+                    let mut rng = rand::rng();
+                    photo_posts.choose(&mut rng)
+                        .and_then(|post| post["photos"][0]["original_size"]["url"].as_str())
+                        .map(|url| url.to_string())
+                };
+                if let Some(url) = image_url {
+                    let embed = serenity::CreateEmbed::new()
+                        .title(format!("Random post tagged #{}", tag))
+                        .image(url)
+                        .color(serenity::Colour::DARK_BLUE);
+                    ctx.send(poise::CreateReply::default().embed(embed)).await?;
+                    return Ok(());
+                }
+            }
+        }
+        ctx.say(format!("Couldn't find any image posts tagged `{}`.", tag)).await?;
+    } else {
+        ctx.say(format!("Tumblr API Error: {}", response.status())).await?;
+    }
+    Ok(())
+}
+*/
+
+#[poise::command(
+    slash_command, 
+    prefix_command, 
+    category = "Fun"
+)]
+pub async fn tumblr(
+    ctx: Context<'_>,
+    #[description = "Tumblr blog to fetch from (e.g., 'gyzmoify' or 'gyzmoify.tumblr.com')"] blog: String,
+) -> Result<(), Error> {
+    let channel = ctx.channel_id().to_channel(&ctx.http()).await?;
+    let mut is_valid_room = false;
+    if let serenity::Channel::Guild(guild_channel) = channel {
+        if guild_channel.nsfw {
+            is_valid_room = true;
+        } else if let Some(parent_id) = guild_channel.parent_id {
+            if let Ok(serenity::Channel::Guild(parent_cat)) = parent_id.to_channel(&ctx.http()).await {
+                if parent_cat.nsfw {
+                    is_valid_room = true;
+                }
+            }
+        }
+        if guild_channel.name == "private-play" {
+            is_valid_room = true;
+        }
+    }
+    if !is_valid_room {
+        ctx.say("❌ Bonk! This command can only be used in NSFW channels.").await?;
+        return Ok(());
+    }
+    ctx.defer().await?;
+    let api_key = match env::var("TUMBLR_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            ctx.say("❌ The bot owner hasn't configured the Tumblr API key yet!").await?;
+            return Ok(());
+        }
+    };
+    let blog_identifier = if blog.contains(".tumblr.com") {
+        blog.clone()
+    } else {
+        format!("{}.tumblr.com", blog)
+    };
+    let url = format!("https://api.tumblr.com/v2/blog/{}/posts/photo?api_key={}", blog_identifier, api_key);
+    let response = reqwest::get(&url).await?;
+    if response.status().is_success() {
+        let json: Value = response.json().await?;
+        if let Some(posts) = json["response"]["posts"].as_array() {
+            let photo_posts: Vec<&Value> = posts.iter()
+                .filter(|p| p["type"] == "photo")
+                .filter(|p| {
+                    if let Some(url) = p["photos"][0]["original_size"]["url"].as_str() {
+                        !url.contains("removed")
+                    } else {
+                        false
+                    }
+                })
+                .collect();
+            if !photo_posts.is_empty() {
+                let image_url = {
+                    let mut rng = rand::rng();
+                    photo_posts.choose(&mut rng)
+                        .and_then(|post| post["photos"][0]["original_size"]["url"].as_str())
+                        .map(|url| url.to_string())
+                };
+                if let Some(url) = image_url {
+                    let embed = serenity::CreateEmbed::new()
+                        .title(format!("Random post from {}", blog_identifier))
+                        .url(format!("https://{}", blog_identifier))
+                        .image(url)
+                        .color(serenity::Colour::DARK_BLUE);
+                    
+                    ctx.send(poise::CreateReply::default().embed(embed)).await?;
+                    return Ok(());
+                }
+            }
+            ctx.say(format!("Couldn't find any valid image posts on the blog `{}`.", blog_identifier)).await?;
+        } else {
+            ctx.say(format!("Couldn't parse posts from the blog `{}`.", blog_identifier)).await?;
+        }
+    } else {
+        ctx.say(format!("Tumblr API Error: {} (Make sure the blog exists and is public)", response.status())).await?;
     }
     Ok(())
 }

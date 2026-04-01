@@ -73,14 +73,51 @@ pub async fn viewstat(
     ctx: Context<'_>,
     #[description = "The stat to view"]
     #[autocomplete = "autocomplete_stats"]
-    stat_name: String,
+    stat_name: Option<String>,
     #[description = "User to view (defaults to you)"]
     user: Option<serenity::User>,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().unwrap();
     let target_user = user.as_ref().unwrap_or(ctx.author());
-    let stat_lower = stat_name.to_lowercase();
-    let total = get_user_stat(guild_id.into(), target_user.id.into(), &stat_lower).await;
-    ctx.say(format!("📊 {} has **{}** `{}`", target_user.name, total, stat_lower)).await?;
+    match stat_name {
+        Some(name) => {
+            let stat_lower = name.to_lowercase();
+            let total = get_user_stat(guild_id.into(), target_user.id.into(), &stat_lower).await;
+            ctx.say(format!("📊 {} > `{}`: **{}**", target_user.name, stat_lower, total)).await?;
+        }
+        None => {
+            let all_stats = get_all_user_stats(guild_id.into(), target_user.id.into()).await;
+            if all_stats.is_empty() {
+                ctx.say(format!("📊 {} has no recorded stats.", target_user.name)).await?;
+            } else {
+                let mut response = format!("📊 **{}'s Stats:**\n", target_user.name);
+                for (name, value) in all_stats {
+                    response.push_str(&format!("- `{}`: **{}**\n", name, value));
+                }
+                ctx.say(response).await?;
+            }
+        }
+    }
     Ok(())
+}
+
+pub async fn get_all_user_stats(guild_id: u64, user_id: u64) -> Vec<(String, i64)> {
+    let filename = format!("./user_stats/stats_{}_{}.toml", guild_id, user_id);
+    let path = Path::new(&filename);
+    let mut stats = Vec::new();
+    
+    if path.exists() {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(doc) = content.parse::<Value>() {
+                if let Some(table) = doc.as_table() {
+                    for (k, v) in table {
+                        if let Some(val) = v.as_integer() {
+                            stats.push((k.clone(), val));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    stats
 }
