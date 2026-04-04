@@ -33,6 +33,8 @@ use crate::utils::*;
         "add_ending",
         "remove_ending",
         "list_endings",
+        "set_max_tickets",
+        "set_ticket_cooldown",
     )
 )]
 pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
@@ -659,5 +661,49 @@ pub async fn list_endings(ctx: Context<'_>) -> Result<(), Error> {
         }
         ctx.say(response).await?;
     }
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_max_tickets(
+    ctx: Context<'_>,
+    #[description = "Maximum number of active tickets a user can have"] limit: u64,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::set_max_open_tickets(guild_id.into(), limit).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("✅ Max open tickets per user set to {}", limit)).await?;
+    let cluster_channel = ChannelId::new(coordination_channel_id);
+    cluster_channel.send_message(
+        &ctx.http(),
+        serenity::CreateMessage::new()
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
+    ).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn set_ticket_cooldown(
+    ctx: Context<'_>,
+    #[description = "Cooldown time in seconds between opening tickets"] seconds: u64,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let cluster_state = data.cluster_state.lock().await;
+    if !cluster_state.is_leader { return Ok(()); }
+    let coordination_channel_id = cluster_state.coordination_channel_id;
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    crate::utils::set_ticket_cooldown(guild_id.into(), seconds).await?;
+    crate::utils::save_config_to_disk().await?;
+    ctx.say(format!("✅ Ticket creation cooldown set to {} seconds", seconds)).await?;
+    let cluster_channel = ChannelId::new(coordination_channel_id);
+    cluster_channel.send_message(
+        &ctx.http(),
+        serenity::CreateMessage::new()
+            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
+    ).await?;
     Ok(())
 }

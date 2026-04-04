@@ -465,3 +465,47 @@ pub async fn get_countdown_endings(guild_id: u64) -> HashMap<String, String> {
     }
     result
 }
+
+pub async fn set_max_open_tickets(guild_id: u64, limit: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert("max_open_tickets".to_string(), Value::Integer(limit as i64));
+    Ok(())
+}
+
+pub async fn get_max_open_tickets(guild_id: u64) -> Option<u64> {
+    let config = CONFIG_CACHE.read().await;
+    config.get(guild_id.to_string())
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("max_open_tickets"))
+        .and_then(|v| v.as_integer())
+        .map(|i| i as u64)
+}
+
+pub async fn set_ticket_cooldown(guild_id: u64, seconds: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = CONFIG_CACHE.write().await;
+    let guild_table = config
+        .as_table_mut()
+        .expect("Root should be a table")
+        .entry(guild_id.to_string())
+        .or_insert(Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .expect("Guild section should be a table");
+    guild_table.insert("ticket_cooldown".to_string(), Value::Integer(seconds as i64));
+    Ok(())
+}
+
+pub async fn get_ticket_cooldown(guild_id: u64) -> Option<u64> {
+    let config = CONFIG_CACHE.read().await;
+    config.get(guild_id.to_string())
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("ticket_cooldown"))
+        .and_then(|v| v.as_integer())
+        .map(|i| i as u64)
+}

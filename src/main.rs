@@ -38,6 +38,7 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 pub struct Data {
     votes: Arc<Mutex<HashMap<String, u32>>>,
     cluster_state: Arc<Mutex<ClusterState>>,
+    ticket_cooldowns: Arc<Mutex<HashMap<(u64, u64), std::time::Instant>>>,
 }
 
 async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
@@ -383,6 +384,7 @@ async fn main() {
                 let data = Data {
                     votes: Arc::new(Mutex::new(HashMap::new())),
                     cluster_state: cluster_state.clone(),
+                    ticket_cooldowns: Arc::new(Mutex::new(HashMap::new())),
                 };
                 let ctx_for_cluster = ctx.clone();
                 let data_for_cluster = Arc::new(Mutex::new(data.clone()));

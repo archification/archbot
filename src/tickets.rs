@@ -83,6 +83,38 @@ pub async fn ticket(
     }
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
     let author = ctx.author();
+    let guild_id_u64: u64 = guild_id.into();
+    let author_id_u64: u64 = author.id.into();
+    if let Some(cooldown_secs) = get_ticket_cooldown(guild_id_u64).await {
+        let cooldowns = data.ticket_cooldowns.lock().await;
+        if let Some(last_opened) = cooldowns.get(&(guild_id_u64, author_id_u64)) {
+            let elapsed = last_opened.elapsed().as_secs();
+            if elapsed < cooldown_secs {
+                ctx.say(format!("⏳ You are opening tickets too fast! Please wait **{}** more seconds.", cooldown_secs - elapsed)).await?;
+                return Ok(());
+            }
+        }
+    }
+    if let Some(max_tickets) = get_max_open_tickets(guild_id_u64).await {
+        let channels = guild_id.channels(&ctx.http()).await?;
+        let mut user_ticket_count = 0;
+        for (_, channel) in channels {
+            if channel.name.starts_with("ticket-") {
+                for overwrite in &channel.permission_overwrites {
+                    if let serenity::PermissionOverwriteType::Member(user_id) = overwrite.kind {
+                        if user_id == author.id && overwrite.allow.contains(Permissions::VIEW_CHANNEL) {
+                            user_ticket_count += 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if user_ticket_count >= max_tickets {
+            ctx.say(format!("❌ You have reached the maximum number of open tickets ({}). Please wait for an admin to handle your existing requests.", max_tickets)).await?;
+            return Ok(());
+        }
+    }
     let category_id = match get_ticket_category(guild_id.into()).await {
         Some(id) => id,
         None => {
@@ -167,6 +199,10 @@ pub async fn ticket(
         ).await?;
     }
     ctx.say(format!("✅ Created your ticket: {}", channel.mention())).await?;
+    if get_ticket_cooldown(guild_id_u64).await.is_some() {
+        let mut cooldowns = data.ticket_cooldowns.lock().await;
+        cooldowns.insert((guild_id_u64, author_id_u64), std::time::Instant::now());
+    }
     Ok(())
 }
 

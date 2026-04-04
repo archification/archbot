@@ -161,18 +161,8 @@ pub async fn handle_cluster_message(
                 cluster_channel.send_files(
                     &ctx.http,
                     vec![serenity::CreateAttachment::bytes(config_str.as_bytes(), "config.toml")],
-                    serenity::CreateMessage::new().content("CONFIG_UPDATE_SIGNAL")
+                    serenity::CreateMessage::new().content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
                 ).await?;
-                /*
-                let cluster_channel = ChannelId::new(coordination_channel_id);
-                cluster_channel.send_message(
-                    ctx,
-                    serenity::CreateMessage::new()
-                        .content(serde_json::to_string(
-                            &ClusterMessage::ConfigUpdate(config_str)
-                        )?)
-                ).await?;
-                */
             }
         }
         ClusterMessage::Heartbeat(info) => {
