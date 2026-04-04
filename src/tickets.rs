@@ -242,8 +242,19 @@ pub async fn closeticket(
         }
     };
     let reason = reason.unwrap_or_else(|| "No reason provided".to_string());
-    ctx.say("🗑 Closing this ticket in 5 seconds...").await?;
-    close_ticket_routine(
+    let msg = ctx.say("🗑 Closing this ticket in 5 seconds...").await?;
+    let ctx_copy = ctx;
+    let countdown_fut = async move {
+        for i in (1..5).rev() {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let second_word = if i == 1 { "second" } else { "seconds"};
+            let _ = msg.edit(
+                ctx_copy,
+                poise::CreateReply::default().content(format!("🗑 Closing this ticket in {} {}...", i, second_word))
+            ).await;
+        }
+    };
+    let close_fut = close_ticket_routine(
         ctx.serenity_context(),
         guild_id,
         channel_id,
@@ -251,7 +262,9 @@ pub async fn closeticket(
         reason,
         closer.tag(),
         Some(closer.id),
-    ).await?;
+    );
+    let (_, close_result) = tokio::join!(countdown_fut, close_fut);
+    close_result?;
     Ok(())
 }
 
