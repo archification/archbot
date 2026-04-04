@@ -14,6 +14,7 @@ use crate::utils::*;
     category = "Config",
     guild_only,
     subcommands(
+        "view",
         "log_channel",
         "ticket_category",
         "add_ticket_role",
@@ -705,5 +706,100 @@ pub async fn set_ticket_cooldown(
         serenity::CreateMessage::new()
             .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, slash_command)]
+pub async fn view(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
+    // Read the raw TOML directly so we can inspect exactly what is explicitly set
+    let toml_content = fs::read_to_string(CONFIG_PATH).unwrap_or_default();
+    let value = toml_content.parse::<Value>().unwrap_or(Value::Table(toml::value::Table::new()));
+    let empty_table = toml::value::Table::new();
+    let guild_table = value
+        .get(&guild_id.to_string())
+        .and_then(|v| v.as_table())
+        .unwrap_or(&empty_table);
+    let mut embed = serenity::CreateEmbed::new()
+        .title("⚙️ Server Configuration")
+        .color(serenity::Colour::BLURPLE);
+
+    // Helpers to easily format values or return the fallback string
+    let format_channel = |key: &str| -> String {
+        guild_table.get(key)
+            .and_then(|v| v.as_integer())
+            .map(|id| format!("<#{}>", id))
+            .unwrap_or_else(|| "❌ Not set".to_string())
+    };
+    let format_role = |key: &str| -> String {
+        guild_table.get(key)
+            .and_then(|v| v.as_integer())
+            .map(|id| format!("<@&{}>", id))
+            .unwrap_or_else(|| "❌ Not set".to_string())
+    };
+    let format_int = |key: &str, suffix: &str| -> String {
+        guild_table.get(key)
+            .and_then(|v| v.as_integer())
+            .map(|val| format!("{}{}", val, suffix))
+            .unwrap_or_else(|| "❌ Not set".to_string())
+    };
+    // --- CHANNELS ---
+    let channels_desc = format!(
+        "**Default Logging:** {}\n**Boot/Quit Logging:** {}\n**Member Logging:** {}\n**Ticket Logging:** {}\n**Mod Logging:** {}\n**Message Logging:** {}\n**Announcements:** {}",
+        format_channel("logging_channel"),
+        format_channel("boot_quit_channel"),
+        format_channel("member_log_channel"),
+        format_channel("ticket_log_channel"),
+        format_channel("mod_log_channel"),
+        format_channel("message_log_channel"),
+        format_channel("announcement_channel")
+    );
+    embed = embed.field("📁 Channels", channels_desc, false);
+    // --- TICKET SYSTEM & ROLES ---
+    let ticket_roles = guild_table.get("ticket_roles")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            if arr.is_empty() {
+                "❌ Not set".to_string()
+            } else {
+                arr.iter()
+                   .filter_map(|v| v.as_integer())
+                   .map(|id| format!("<@&{}>", id))
+                   .collect::<Vec<_>>()
+                   .join(", ")
+            }
+        })
+        .unwrap_or_else(|| "❌ Not set".to_string());
+    let tickets_desc = format!(
+        "**Ticket Category:** {}\n**Ticket Roles:** {}\n**Exempt Role:** {}\n**Max Open Tickets:** {}\n**Ticket Cooldown:** {}",
+        format_channel("ticket_category"),
+        ticket_roles,
+        format_role("ticket_exempt_role"),
+        format_int("max_open_tickets", " tickets"),
+        format_int("ticket_cooldown", " seconds")
+    );
+    embed = embed.field("🎫 Ticket System", tickets_desc, false);
+    // --- MISC / MODULES ---
+    let custom_stats = guild_table.get("custom_stats")
+        .and_then(|v| v.as_array())
+        .map(|arr| format!("✅ {} tracked", arr.len()))
+        .unwrap_or_else(|| "❌ Not set".to_string());
+    let countdown_endings = guild_table.get("countdown_endings")
+        .and_then(|v| v.as_table())
+        .map(|table| format!("✅ {} configured", table.len()))
+        .unwrap_or_else(|| "❌ Not set".to_string());
+    let react_roles = guild_table.get("react_roles")
+        .and_then(|v| v.as_table())
+        .map(|table| format!("✅ Configured on {} message(s)", table.len()))
+        .unwrap_or_else(|| "❌ Not set".to_string());
+    let misc_desc = format!(
+        "**React Roles:** {}\n**Custom Stats:** {}\n**Countdown Endings:** {}",
+        react_roles,
+        custom_stats,
+        countdown_endings
+    );
+    embed = embed.field("🧩 Modules", misc_desc, false);
+    // Send the compiled configuration report
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
