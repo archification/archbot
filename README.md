@@ -10,14 +10,24 @@ A feature-rich Discord bot with ticket system, moderation tools, announcements, 
 - **Announcements**: Send server-wide announcements
 - **Logging**: Comprehensive logging for various events
 - **Configuration**: Flexible per-guild configuration
+- **Stats**: Stat tracking with configurable stats
+- **Countdown**: Countdowns with configurable endings
+- **Tumblr**: Uploads random image from specified tumblr blog (nsfw channels only)
 
-## Setup
+## Dev Setup
 
 1. Clone this repository
 2. Install Rust (latest stable version)
 3. Create `config.toml` and `cluster.toml` files (see Configuration section)
-4. Set `DISCORD_TOKEN` environment variable
+4. Set `DISCORD_TOKEN` environment variable in run script
 5. Run with `cargo run`
+
+## Release Setup
+
+1. Download release
+2. Create `config.toml` and `cluster.toml` files (see Configuration section)
+3. Set `DISCORD_TOKEN` environment variable in run script
+4. Run with `run.sh`
 
 ## Configuration
 
@@ -33,13 +43,18 @@ The bot automatically creates this file with default values if it doesn't exist.
 Example structure:
 ```toml
 [guild_id]
+announcement_channel = 1234567890    # Announcement channel
+custom_stats = [
+    "one",
+    "two",
+    "three",
+]
 logging_channel = 1234567890         # Default logging channel
 member_log_channel = 1234567890      # Member join/leave logs
+ticket_category = 1234567890         # Category for ticket channels
 ticket_log_channel = 1234567890      # Ticket activity logs
 mod_log_channel = 1234567890         # Moderation action logs
-announcement_channel = 1234567890    # Announcement channel
 boot_quit_channel = 1234567890       # Bot startup/shutdown notifications
-ticket_category = 1234567890         # Category for ticket channels
 ticket_roles = [1234567890]          # Roles with ticket access
 ticket_exempt_role = 1234567890      # Role exempt from seeing ticket message
 ```
@@ -48,7 +63,7 @@ Running the `/help config` command will show all available subcommands for confi
 ## Commands
 
 ### General Commands
-* `help [command]` - Shows help menu (leader-only)
+* `help [command]` - Shows help menu
 * `vote <choice>` - Vote for something
 * `getvotes [choice]` - Show vote counts
 
@@ -59,7 +74,7 @@ Running the `/help config` command will show all available subcommands for confi
 ### Moderation Commands
 * `kick <user> [reason]` - Kick a user (admin-only)
 * `ban <user> [reason] [delete_message_days]` - Ban a user (admin-only)
-* `announce <message>` - Make an announcement (admin-only, leader-only)
+* `announce <message>` - Make an announcement (admin-only)
 
 ### Configuration Commands (admin-only, leader-only)
 * `config` - Show configuration commands
@@ -114,4 +129,4 @@ The bot logs these events to configured channels:
     * Guild Messages
     * Message Content
 
-License
+## License
