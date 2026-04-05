@@ -1,3 +1,5 @@
+if bot with already used priority joins, it should be quit with an error saying to change priority
+
 member join and leave stats
 
 #logging
