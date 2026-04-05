@@ -220,19 +220,6 @@ pub async fn set_ticket_exempt_role(guild_id: u64, role_id: u64) -> Result<(), B
     Ok(())
 }
 
-pub async fn set_logging_channel(guild_id: u64, channel_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = CONFIG_CACHE.write().await;
-    let guild_table = config
-        .as_table_mut()
-        .expect("Root should be a table")
-        .entry(guild_id.to_string())
-        .or_insert(Value::Table(toml::value::Table::new()))
-        .as_table_mut()
-        .expect("Guild section should be a table");
-    guild_table.insert("logging_channel".to_owned().to_string(), Value::Integer(channel_id as i64));
-    Ok(())
-}
-
 pub async fn set_ticket_category(guild_id: u64, category_id: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config = CONFIG_CACHE.write().await;
     let guild_table = config

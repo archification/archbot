@@ -1,5 +1,5 @@
 use crate::{Context, Error};
-use poise::serenity_prelude::{self as serenity, Mentionable};
+use poise::serenity_prelude::{self as serenity};
 use poise::serenity_prelude::ChannelId;
 use poise::serenity_prelude::parse_emoji;
 use toml::Value;
@@ -15,17 +15,13 @@ use crate::utils::*;
     guild_only,
     subcommands(
         "view",
-        "log_channel",
+        "set_log_channel",
         "ticket_category",
         "add_ticket_role",
         "remove_ticket_role",
         "ticket_message",
         "ticket_exempt_role",
         "remove_ticket_exempt_role",
-        "list_ticket_roles",
-        "set_member_log_channel",
-        "set_ticket_log_channel",
-        "set_announcement_channel",
         "reactrole",
         "removereactrole",
         "cleanreactroles",
@@ -56,12 +52,30 @@ pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Debug, poise::ChoiceParameter)]
+pub enum LogChannelType {
+    #[name = "boot"]
+    Boot,
+    #[name = "member"]
+    Member,
+    #[name = "ticket"]
+    Ticket,
+    #[name = "announcement"]
+    Announcement,
+    #[name = "mod"]
+    Mod,
+    #[name = "message"]
+    Message,
+    #[name = "default"]
+    Default,
+}
+
 #[poise::command(prefix_command, slash_command)]
 pub async fn set_log_channel(
     ctx: Context<'_>,
     #[description = "Type of events to log"]
     #[rename = "type"]
-    event_type: String,
+    event_type: LogChannelType,
     #[description = "Channel to send logs to"]
     channel: serenity::GuildChannel,
 ) -> Result<(), Error> {
@@ -72,124 +86,17 @@ pub async fn set_log_channel(
     }
     let coordination_channel_id = cluster_state.coordination_channel_id;
     let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let channel_key = match event_type.to_lowercase().as_str() {
-        "boot" | "shutdown" => "boot_quit_channel",
-        "member" | "join" | "leave" => "member_log_channel",
-        "ticket" => "ticket_log_channel",
-        "announcement" => "announcement_channel",
-        "mod" | "moderation" => "mod_log_channel",
-        "message" | "deletion" => "message_log_channel",
-        _ => "logging_channel",
+    let channel_key = match event_type {
+        LogChannelType::Boot => "boot_quit_channel",
+        LogChannelType::Member => "member_log_channel",
+        LogChannelType::Ticket => "ticket_log_channel",
+        LogChannelType::Announcement => "announcement_channel",
+        LogChannelType::Mod => "mod_log_channel",
+        LogChannelType::Message => "message_log_channel",
+        LogChannelType::Default => "logging_channel",
     };
     let _ = set_specific_logging_channel(guild_id.into(), channel_key, channel.id.into()).await;
     ctx.say(format!("Updated {} channel to {}", channel_key, channel.name)).await?;
-    let cluster_channel = ChannelId::new(coordination_channel_id);
-    cluster_channel.send_message(
-        &ctx.http(),
-        serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
-    ).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn set_announcement_channel(
-    ctx: Context<'_>,
-    #[description = "Channel for announcements"]
-    channel: serenity::GuildChannel,
-) -> Result<(), Error> {
-    let data = ctx.data();
-    let cluster_state = data.cluster_state.lock().await;
-    if !cluster_state.is_leader {
-        return Ok(());
-    }
-    let coordination_channel_id = cluster_state.coordination_channel_id;
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let _ = crate::utils::set_specific_logging_channel(
-        guild_id.into(),
-        "announcement_channel",
-        channel.id.into()
-    ).await;
-    ctx.say(format!("📢 Announcements will now be sent to {}", channel.mention())).await?;
-    let cluster_channel = ChannelId::new(coordination_channel_id);
-    cluster_channel.send_message(
-        &ctx.http(),
-        serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
-    ).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn set_ticket_log_channel(
-    ctx: Context<'_>,
-    #[description = "Channel to send ticket logs to"]
-    channel: serenity::GuildChannel,
-) -> Result<(), Error> {
-    let data = ctx.data();
-    let cluster_state = data.cluster_state.lock().await;
-    if !cluster_state.is_leader {
-        return Ok(());
-    }
-    let coordination_channel_id = cluster_state.coordination_channel_id;
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let _ = crate::utils::set_specific_logging_channel(
-        guild_id.into(),
-        "ticket_log_channel",
-        channel.id.into()
-    ).await;
-    ctx.say(format!("Updated ticket log channel to {}", channel.name)).await?;
-    let cluster_channel = ChannelId::new(coordination_channel_id);
-    cluster_channel.send_message(
-        &ctx.http(),
-        serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
-    ).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn set_member_log_channel(
-    ctx: Context<'_>,
-    #[description = "Channel to send member join/leave logs to"]
-    channel: serenity::GuildChannel,
-) -> Result<(), Error> {
-    let data = ctx.data();
-    let cluster_state = data.cluster_state.lock().await;
-    if !cluster_state.is_leader {
-        return Ok(());
-    }
-    let coordination_channel_id = cluster_state.coordination_channel_id;
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let _ = crate::utils::set_specific_logging_channel(
-        guild_id.into(),
-        "member_log_channel",
-        channel.id.into()
-    ).await;
-    ctx.say(format!("Updated member log channel to {}", channel.name)).await?;
-    let cluster_channel = ChannelId::new(coordination_channel_id);
-    cluster_channel.send_message(
-        &ctx.http(),
-        serenity::CreateMessage::new()
-            .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
-    ).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn log_channel(
-    ctx: Context<'_>,
-    #[description = "Channel to send logs to"] channel: serenity::GuildChannel,
-) -> Result<(), Error> {
-    let data = ctx.data();
-    let cluster_state = data.cluster_state.lock().await;
-    if !cluster_state.is_leader {
-        return Ok(());
-    }
-    let coordination_channel_id = cluster_state.coordination_channel_id;
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let _ = set_logging_channel(guild_id.into(), channel.id.into()).await;
-    ctx.say(format!("Updated logging channel to {}", channel.name)).await?;
     let cluster_channel = ChannelId::new(coordination_channel_id);
     cluster_channel.send_message(
         &ctx.http(),
@@ -366,31 +273,6 @@ pub async fn remove_ticket_exempt_role(
         serenity::CreateMessage::new()
             .content(serde_json::to_string(&ClusterMessage::ConfigUpdate)?)
     ).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn list_ticket_roles(
-    ctx: Context<'_>,
-) -> Result<(), Error> {
-    let data = ctx.data();
-    let cluster_state = data.cluster_state.lock().await;
-    if !cluster_state.is_leader {
-        return Ok(());
-    }
-    let guild_id = ctx.guild_id().ok_or("This command must be used in a guild")?;
-    let roles = get_ticket_roles(guild_id.into()).await;
-    if roles.is_empty() {
-        ctx.say("No ticket access roles configured").await?;
-        return Ok(());
-    }
-    let mut response = "Ticket access roles:\n".to_string();
-    for role_id in roles {
-        if let Some(role) = ctx.guild().unwrap().roles.get(&serenity::RoleId::new(role_id)) {
-            response.push_str(&format!("- {}\n", role.name));
-        }
-    }
-    ctx.say(response).await?;
     Ok(())
 }
 
