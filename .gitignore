@@ -10,4 +10,5 @@ ticket_templates
 prompt
 cluster.toml
 ship/
+deploy.py
 link

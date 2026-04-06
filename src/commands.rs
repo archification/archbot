@@ -381,63 +381,6 @@ pub async fn reddit(
     Ok(())
 }
 
-/*
-#[poise::command(
-    slash_command, 
-    prefix_command, 
-    category = "Fun",
-    nsfw_only 
-)]
-pub async fn tumblr(
-    ctx: Context<'_>,
-    #[description = "Tag to search for"] tag: String,
-) -> Result<(), Error> {
-    ctx.defer().await?;
-    let api_key = match env::var("TUMBLR_API_KEY") {
-        Ok(key) => key,
-        Err(_) => {
-            ctx.say("❌ The bot owner hasn't configured the Tumblr API key yet!").await?;
-            return Ok(());
-        }
-    };
-    let blog_identifier = if blog.contains(".tumblr.com") {
-        blog.clone()
-    } else {
-        format!("{}.tumblr.com", blog)
-    };
-    let url = format!("https://api.tumblr.com/v2/tagged?tag={}&api_key={}", tag, api_key);
-    let response = reqwest::get(&url).await?;
-    if response.status().is_success() {
-        let json: Value = response.json().await?;
-        if let Some(posts) = json["response"].as_array() {
-            let photo_posts: Vec<&Value> = posts.iter()
-                .filter(|p| p["type"] == "photo")
-                .collect();
-            if !photo_posts.is_empty() {
-                let image_url = {
-                    let mut rng = rand::rng();
-                    photo_posts.choose(&mut rng)
-                        .and_then(|post| post["photos"][0]["original_size"]["url"].as_str())
-                        .map(|url| url.to_string())
-                };
-                if let Some(url) = image_url {
-                    let embed = serenity::CreateEmbed::new()
-                        .title(format!("Random post tagged #{}", tag))
-                        .image(url)
-                        .color(serenity::Colour::DARK_BLUE);
-                    ctx.send(poise::CreateReply::default().embed(embed)).await?;
-                    return Ok(());
-                }
-            }
-        }
-        ctx.say(format!("Couldn't find any image posts tagged `{}`.", tag)).await?;
-    } else {
-        ctx.say(format!("Tumblr API Error: {}", response.status())).await?;
-    }
-    Ok(())
-}
-*/
-
 #[poise::command(
     slash_command, 
     prefix_command, 
@@ -503,13 +446,28 @@ pub async fn tumblr(
                         .map(|url| url.to_string())
                 };
                 if let Some(url) = image_url {
-                    let embed = serenity::CreateEmbed::new()
-                        .title(format!("Random post from {}", blog_identifier))
-                        .url(format!("https://{}", blog_identifier))
-                        .image(url)
-                        .color(serenity::Colour::DARK_BLUE);
-                    
-                    ctx.send(poise::CreateReply::default().embed(embed)).await?;
+                    match reqwest::get(&url).await {
+                        Ok(img_response) => {
+                            if let Ok(bytes) = img_response.bytes().await {
+                                let filename = url.split('/').last().unwrap_or("image.png").to_string();
+                                let attachment = serenity::CreateAttachment::bytes(bytes.to_vec(), &filename);
+                                let embed = serenity::CreateEmbed::new()
+                                    .title(format!("Random post from {}", blog_identifier))
+                                    .url(format!("https://{}", blog_identifier))
+                                    .image(format!("attachment://{}", filename))
+                                    .color(serenity::Colour::DARK_BLUE);
+                                ctx.send(poise::CreateReply::default()
+                                    .attachment(attachment)
+                                    .embed(embed)
+                                ).await?;
+                                return Ok(());
+                            }
+                        }
+                        Err(e) => {
+                            println!("Failed to download Tumblr image: {}", e);
+                        }
+                    }
+                    ctx.say(format!("Found a post, but failed to fetch the image data from `{}`.", blog_identifier)).await?;
                     return Ok(());
                 }
             }
