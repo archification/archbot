@@ -353,30 +353,56 @@ pub async fn reddit(
     #[description = "Subreddit to fetch from"] subreddit: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
-    let url = format!("https://www.reddit.com/r/{}/random.json", subreddit);
+    let url = format!("https://api.pullpush.io/reddit/search/submission/?subreddit={}&size=50", subreddit);
     let client = reqwest::Client::builder()
-        .user_agent("windows:archbot:v0.1.0 (by /u/archification)")
+        .user_agent("archbot/0.1.0")
         .build()?;
     let response = client.get(&url).send().await?;
     if response.status().is_success() {
-        let json: Value = response.json().await?;
-        if let Some(image_url) = json[0]["data"]["children"][0]["data"]["url"].as_str() {
-            if image_url.ends_with(".jpg") || image_url.ends_with(".png") || image_url.ends_with(".gif") {
-                let embed = serenity::CreateEmbed::new()
-                    .title(format!("Random image from r/{}", subreddit))
-                    .url(image_url)
-                    .image(image_url)
-                    .color(serenity::Colour::BLURPLE);
-                ctx.send(poise::CreateReply::default().embed(embed)).await?;
-                return Ok(());
-            } else {
-                ctx.say(format!("Found a post, but it wasn't a direct image link: {}", image_url)).await?;
-                return Ok(());
+        let json: serde_json::Value = response.json().await?;
+        if let Some(posts) = json["data"].as_array() {
+            let image_posts: Vec<&serde_json::Value> = posts.iter()
+                .filter(|p| {
+                    if let Some(url) = p["url"].as_str() {
+                        url.ends_with(".jpg") || url.ends_with(".png") || url.ends_with(".gif") || url.ends_with(".jpeg")
+                    } else {
+                        false
+                    }
+                })
+                .collect();
+            if !image_posts.is_empty() {
+                let post_data = {
+                    let mut rng = rand::rng();
+                    use rand::seq::IndexedRandom; 
+                    image_posts.choose(&mut rng).map(|post| {
+                        (
+                            post["url"].as_str().unwrap_or("").to_string(),
+                            post["title"].as_str().unwrap_or("Random image").to_string(),
+                            post["permalink"].as_str().unwrap_or("").to_string(),
+                        )
+                    })
+                };
+                if let Some((image_url, title, permalink)) = post_data {
+                    let post_link = if permalink.is_empty() {
+                        image_url.clone()
+                    } else {
+                        format!("https://www.reddit.com{}", permalink)
+                    };
+                    let embed = serenity::CreateEmbed::new()
+                        .title(title)
+                        .url(post_link)
+                        .image(image_url)
+                        .color(serenity::Colour::BLURPLE);
+                    ctx.send(poise::CreateReply::default().embed(embed)).await?;
+                    return Ok(());
+                }
             }
+            ctx.say("Could not find any direct image links in the recent posts of that subreddit.").await?;
+        } else {
+            ctx.say("Failed to parse the data from Pullpush. The subreddit might be empty or invalid.").await?;
         }
-        ctx.say("Could not find a valid image in that subreddit. Try again!").await?;
     } else {
-        ctx.say(format!("Failed to fetch from Reddit. Status: {}", response.status())).await?;
+        ctx.say(format!("Failed to fetch from Pullpush API. Status: {}", response.status())).await?;
     }
     Ok(())
 }
