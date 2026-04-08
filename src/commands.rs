@@ -410,32 +410,13 @@ pub async fn reddit(
 #[poise::command(
     slash_command, 
     prefix_command, 
-    category = "Fun"
+    category = "Fun",
+    nsfw_only
 )]
 pub async fn tumblr(
     ctx: Context<'_>,
     #[description = "Tumblr blog to fetch from (e.g., 'gyzmoify' or 'gyzmoify.tumblr.com')"] blog: String,
 ) -> Result<(), Error> {
-    let channel = ctx.channel_id().to_channel(&ctx.http()).await?;
-    let mut is_valid_room = false;
-    if let serenity::Channel::Guild(guild_channel) = channel {
-        if guild_channel.nsfw {
-            is_valid_room = true;
-        } else if let Some(parent_id) = guild_channel.parent_id {
-            if let Ok(serenity::Channel::Guild(parent_cat)) = parent_id.to_channel(&ctx.http()).await {
-                if parent_cat.nsfw {
-                    is_valid_room = true;
-                }
-            }
-        }
-        if guild_channel.name == "private-play" {
-            is_valid_room = true;
-        }
-    }
-    if !is_valid_room {
-        ctx.say("❌ Bonk! This command can only be used in NSFW channels.").await?;
-        return Ok(());
-    }
     ctx.defer().await?;
     let api_key = match env::var("TUMBLR_API_KEY") {
         Ok(key) => key,
@@ -467,6 +448,7 @@ pub async fn tumblr(
             if !photo_posts.is_empty() {
                 let image_url = {
                     let mut rng = rand::rng();
+                    use rand::seq::IndexedRandom;
                     photo_posts.choose(&mut rng)
                         .and_then(|post| post["photos"][0]["original_size"]["url"].as_str())
                         .map(|url| url.to_string())
