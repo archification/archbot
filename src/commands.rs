@@ -283,6 +283,7 @@ pub async fn countdown(
     #[description = "Starting number (default 10)"] start: Option<u32>,
     #[description = "Difficulty (easy, medium, hard)"] difficulty: Option<Difficulty>,
     #[description = "Ending name (or 'random')"] ending: Option<String>,
+    #[description = "User to mention in the ending (defaults to you)"] target: Option<serenity::User>,
 ) -> Result<(), Error> {
     let start_val = start.unwrap_or(10);
     if start_val == 0 || start_val > 100 {
@@ -310,6 +311,15 @@ pub async fn countdown(
     } else {
         "0".to_string()
     };
+    let mention_user = target.as_ref().unwrap_or(ctx.author());
+    let mention_str = poise::serenity_prelude::Mentionable::mention(mention_user).to_string();
+    let formatted_ending = if final_message == "0" {
+        format!("0 {}", mention_str)
+    } else if final_message.contains("{user}") {
+        final_message.replace("{user}", &mention_str)
+    } else {
+        format!("{} {}", final_message, mention_str)
+    };
     let mut current = start_val as i32;
     let msg = ctx.say(format!("⏱️ {}", current)).await?;
     while current > 0 {
@@ -329,16 +339,13 @@ pub async fn countdown(
         } else {
             current -= 1;
         }
-        let content_to_send = if current == 0 {
-            final_message.clone()
-        } else {
-            format!("⏱️ {}", current)
-        };
+        let content_to_send = format!("⏱️ {}", current);
         if let Err(e) = msg.edit(ctx, poise::CreateReply::default().content(content_to_send)).await {
             println!("Failed to edit countdown message: {}", e);
             break;
         }
     }
+    ctx.channel_id().say(&ctx.http(), formatted_ending).await?;
     Ok(())
 }
 
@@ -373,7 +380,6 @@ pub async fn reddit(
             if !image_posts.is_empty() {
                 let post_data = {
                     let mut rng = rand::rng();
-                    use rand::seq::IndexedRandom; 
                     image_posts.choose(&mut rng).map(|post| {
                         (
                             post["url"].as_str().unwrap_or("").to_string(),
@@ -448,7 +454,6 @@ pub async fn tumblr(
             if !photo_posts.is_empty() {
                 let image_url = {
                     let mut rng = rand::rng();
-                    use rand::seq::IndexedRandom;
                     photo_posts.choose(&mut rng)
                         .and_then(|post| post["photos"][0]["original_size"]["url"].as_str())
                         .map(|url| url.to_string())
